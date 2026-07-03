@@ -1,7 +1,7 @@
 ---
-title: "TypeScript API Functions — Thermal Printer"
+title: "TypeScript API Functions — Tauri Thermal Printer"
 sidebarTitle: "Functions"
-description: "Reference for the three async IPC functions exported by tauri-plugin-thermal-printer: print, list, and test thermal printers."
+description: "Reference for the three async IPC functions in tauri-plugin-thermal-printer: print_thermal_printer, list_thermal_printers, and test_thermal_printer."
 ---
 
 The TypeScript package exposes three async functions that communicate with the Rust backend via Tauri's IPC layer. Each function invokes a named command on the `plugin:thermal-printer` channel and returns a `Promise` that resolves on success or throws a descriptive `string` on failure. All three functions must be called from the Tauri frontend context.
@@ -33,8 +33,8 @@ Sends a fully-described print job to the specified thermal printer. The Rust bac
     <ParamField body="options" type="CodePage" required>
       ESC/POS page selection and host-side encoding strategy. See [`CodePage`](/api/types#codepage).
     </ParamField>
-    <ParamField body="paper_size" type="PaperSize" default="Mm80">
-      Paper roll width. One of `'Mm40'` | `'Mm44'` | `'Mm58'` | `'Mm72'` | `'Mm80'` | `'Mm104'`.
+    <ParamField body="paper_size" type="PaperSize" required>
+      Paper roll width. One of `'Mm40'` | `'Mm44'` | `'Mm58'` | `'Mm72'` | `'Mm80'` | `'Mm104'`. Use `'Mm80'` when in doubt.
     </ParamField>
   </Expandable>
 </ParamField>

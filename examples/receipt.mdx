@@ -1,5 +1,5 @@
 ---
-title: "Printing Receipts with Tauri Thermal Printer"
+title: "Thermal Printer Receipt Examples for Tauri Applications"
 sidebarTitle: "Receipts"
 description: "Complete receipt examples for retail and payment use-cases — supermarket shopping receipts with item tables and a bank-transfer payment receipt."
 ---
@@ -19,7 +19,6 @@ import {
   print_thermal_printer,
   type PrintJobRequest,
   title,
-  subtitle,
   text,
   line,
   feed,
@@ -143,13 +142,12 @@ const supermarketReceipt: PrintJobRequest = {
     text("www.supereconomia.com",   { align: TEXT_ALIGN.CENTER }),
 
     // ── Machine-readable codes ───────────────────────────────────
-    { Qr: {
-        data: "https://supereconomia.com/ticket/0012345",
-        size: 5,
-        error_correction: QR_ERROR_CORRECTION.M,
-        model: 2,
-        align: TEXT_ALIGN.CENTER,
-    }},
+    qr("https://supereconomia.com/ticket/0012345", {
+      size: 5,
+      error_correction: QR_ERROR_CORRECTION.M,
+      model: 2,
+      align: TEXT_ALIGN.CENTER,
+    }),
     barcode("0012345", BARCODE_TYPE.CODE128, {
       width: 2,
       height: 50,

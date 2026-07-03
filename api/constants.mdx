@@ -1,5 +1,5 @@
 ---
-title: "TypeScript API Constants — Thermal Printer"
+title: "TypeScript API Constants — Tauri Thermal Printer"
 sidebarTitle: "Constants"
 description: "All exported constant objects, lookup maps, defaults, and utility functions from tauri-plugin-thermal-printer for type-safe printer configuration."
 ---
@@ -262,17 +262,17 @@ The complete set of host-side encoding identifiers. All entries except `ACCENT_R
 
 ```typescript
 export const ENCODE = {
-  // Special built-in transliterator
-  ACCENT_REMOVER: 'ACCENT_REMOVER',
-
-  // encoding_rs statics
   BIG5:           'BIG5',
   EUC_JP:         'EUC_JP',
   EUC_KR:         'EUC_KR',
   GBK:            'GBK',
-  GB18030:        'GB18030',
   IBM866:         'IBM866',
   ISO_2022_JP:    'ISO_2022_JP',
+  ISO_8859_10:    'ISO_8859_10',
+  ISO_8859_13:    'ISO_8859_13',
+  ISO_8859_14:    'ISO_8859_14',
+  ISO_8859_15:    'ISO_8859_15',
+  ISO_8859_16:    'ISO_8859_16',
   ISO_8859_2:     'ISO_8859_2',
   ISO_8859_3:     'ISO_8859_3',
   ISO_8859_4:     'ISO_8859_4',
@@ -281,20 +281,15 @@ export const ENCODE = {
   ISO_8859_7:     'ISO_8859_7',
   ISO_8859_8:     'ISO_8859_8',
   ISO_8859_8_I:   'ISO_8859_8_I',
-  ISO_8859_10:    'ISO_8859_10',
-  ISO_8859_13:    'ISO_8859_13',
-  ISO_8859_14:    'ISO_8859_14',
-  ISO_8859_15:    'ISO_8859_15',
-  ISO_8859_16:    'ISO_8859_16',
   KOI8_R:         'KOI8_R',
   KOI8_U:         'KOI8_U',
-  MACINTOSH:      'MACINTOSH',
-  REPLACEMENT:    'REPLACEMENT',
   SHIFT_JIS:      'SHIFT_JIS',
-  UTF_8:          'UTF_8',
   UTF_16BE:       'UTF_16BE',
   UTF_16LE:       'UTF_16LE',
-  WINDOWS_874:    'WINDOWS_874',
+  UTF_8:          'UTF_8',
+  GB18030:        'GB18030',
+  MACINTOSH:      'MACINTOSH',
+  REPLACEMENT:    'REPLACEMENT',
   WINDOWS_1250:   'WINDOWS_1250',
   WINDOWS_1251:   'WINDOWS_1251',
   WINDOWS_1252:   'WINDOWS_1252',
@@ -304,8 +299,10 @@ export const ENCODE = {
   WINDOWS_1256:   'WINDOWS_1256',
   WINDOWS_1257:   'WINDOWS_1257',
   WINDOWS_1258:   'WINDOWS_1258',
+  WINDOWS_874:    'WINDOWS_874',
   X_MAC_CYRILLIC: 'X_MAC_CYRILLIC',
   X_USER_DEFINED: 'X_USER_DEFINED',
+  ACCENT_REMOVER: 'ACCENT_REMOVER',
 } as const
 ```
 

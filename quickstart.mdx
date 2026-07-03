@@ -1,5 +1,5 @@
 ---
-title: "Quickstart: Print Your First Thermal Receipt"
+title: "Quickstart: Print Your First ESC/POS Thermal Receipt"
 sidebarTitle: "Quickstart"
 description: "List printers, build a print job with real sections, send it to your thermal printer, and run a test print — all in under five minutes."
 ---
@@ -148,7 +148,7 @@ Once the plugin is installed and registered, printing a receipt takes three API 
     }
     ```
 
-    All fields after `printer_info` are optional and default to `false` / `null` when omitted, so you can start with just the printer config and enable sections as needed.
+    All fields after `printer_info` are optional. Most diagnostic flags (`include_text`, `include_text_styles`, `include_alignment`, `include_columns`, `include_separators`, `include_barcode`, `include_qr`, `include_beep`, `cut_paper`, `test_feed`) default to `true` on the server side; flags for less-common tests (`include_barcode_types`, `include_image`, `test_cash_drawer`, `test_all_fonts`, `test_invert`, `test_rotate`) default to `false`. You can start with just the printer config and override individual flags as needed.
   </Step>
 </Steps>
 

@@ -1,5 +1,5 @@
 ---
-title: "Printing Tickets with Tauri Thermal Printer"
+title: "Thermal Printer Ticket Examples for Tauri Applications"
 sidebarTitle: "Tickets"
 description: "Ready-to-use ticket examples: event admission tickets with QR and barcode, queue management turn tickets, and parking entry tickets."
 ---
@@ -87,13 +87,12 @@ const eventTicket: PrintJobRequest = {
     // ── QR (level H for maximum damage tolerance) ─────────────────
     // error_correction: "H" recovers up to 30% of the code area,
     // making it robust against creases, smudges, or screenshot crops.
-    { Qr: {
-        data: "TICKET-A1234567-CONCIERTO2025",
-        size: 6,
-        error_correction: QR_ERROR_CORRECTION.H,
-        model: 2,
-        align: TEXT_ALIGN.CENTER,
-    }},
+    qr("TICKET-A1234567-CONCIERTO2025", {
+      size: 6,
+      error_correction: QR_ERROR_CORRECTION.H,
+      model: 2,
+      align: TEXT_ALIGN.CENTER,
+    }),
 
     // ── CODE128 barcode for legacy gate scanners ──────────────────
     barcode("A1234567", BARCODE_TYPE.CODE128, {
@@ -139,6 +138,7 @@ import {
   line,
   feed,
   beep,
+  qr,
   ENCODE,
   TEXT_ALIGN,
   TEXT_SIZE,
@@ -175,13 +175,12 @@ const queueTicket: PrintJobRequest = {
 
     // ── QR for mobile queue status lookup ─────────────────────────
     // Level L is enough for a short alphanumeric turn code.
-    { Qr: {
-        data: "A-123",
-        size: 4,
-        error_correction: QR_ERROR_CORRECTION.L,
-        model: 2,
-        align: TEXT_ALIGN.CENTER,
-    }},
+    qr("A-123", {
+      size: 4,
+      error_correction: QR_ERROR_CORRECTION.L,
+      model: 2,
+      align: TEXT_ALIGN.CENTER,
+    }),
     text("Escanea para consultar", { align: TEXT_ALIGN.CENTER }),
     feed(2),
 

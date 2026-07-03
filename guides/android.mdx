@@ -1,5 +1,5 @@
 ---
-title: "Using the Plugin on Android Devices"
+title: "Using the Thermal Printer Plugin on Android Devices"
 sidebarTitle: "Android"
 description: "Everything you need to know about Bluetooth printer discovery, MAC address targeting, runtime permissions, and Android-specific limitations."
 ---
@@ -48,7 +48,7 @@ The following Android permissions are bundled with the plugin:
 
 ## Discovering Printers on Android
 
-Call `list_thermal_printers()` to retrieve all discoverable printers. On Android this scans two sources simultaneously:
+Call `list_thermal_printers()` to retrieve all discoverable printers. On Android this queries two sources in sequence:
 
 - **Bluetooth** — iterates over all **paired (bonded)** devices and filters for those that look like printers (by Bluetooth device class, or names containing "printer", "print", "POS", or "thermal").
 - **USB** — iterates over connected USB devices and checks for the USB printer interface class (`bDeviceClass = 7`). USB printers appear in the list with `interface_type: "USB"` but **cannot be printed to**.
@@ -178,7 +178,7 @@ Before the plugin can connect, you must pair the printer once through Android's 
   </Accordion>
 
   <Accordion title="Printer not returned by list_thermal_printers()">
-    The printer must be **paired** before it can be discovered. If the printer does not appear, complete the pairing step in Android Bluetooth settings first. Also confirm that the printer's name or Bluetooth device class matches the plugin's detection heuristics (name contains "printer", "print", "POS", or "thermal", or device class is `IMAGING`/`0x0680`).
+    The printer must be **paired** before it can be discovered. If the printer does not appear, complete the pairing step in Android Bluetooth settings first. Also confirm that the printer's name or Bluetooth device class matches the plugin's detection heuristics (name contains "printer", "print", "POS", or "thermal", or device class matches the Imaging major class `0x0600` or the printer subclass `0x0680`).
   </Accordion>
 
   <Accordion title="Print job succeeds but nothing prints">

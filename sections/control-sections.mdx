@@ -1,7 +1,7 @@
 ---
 title: "Control Section Types: Feed, Cut, Beep & Drawer"
 sidebarTitle: "Control"
-description: "Control thermal printer hardware actions — paper feed, paper cut, acoustic beep, and cash drawer pulse — using dedicated control sections in your print job."
+description: "Manage thermal printer hardware actions — paper feed, paper cut, acoustic beep, and cash drawer pulse — using dedicated sections in your print job."
 ---
 
 Control sections manage the physical actions a thermal printer can perform beyond printing text and graphics. Rather than embedding raw ESC/POS commands yourself, you add declarative control sections to your `sections` array and the plugin translates each one into the appropriate binary command sequence. The four control sections — `Feed`, `Cut`, `Beep`, and `Drawer` — cover the full range of hardware operations you are likely to need in a POS or ticketing application.
@@ -117,10 +117,7 @@ cut("partial", 0)
 </CodeGroup>
 
 <Note>
-  A **tail cut** (`{ "Cut": { "mode": "partial", "feed": 0 } }`) is **automatically appended** to every print job by default. You do not need to add an explicit `Cut` section for the standard end-of-job cut. Add your own `Cut` section only when you need:
-  - A cut in the **middle** of a document (e.g., to separate two receipts in one job).
-  - A **full cut** instead of the default partial.
-  - A different `feed` value before the cut.
+  **No automatic cut is appended.** The plugin processes only the sections you explicitly include in `sections`. To cut the paper at the end of a job, add a `Cut` section yourself — for example, `cut()` for a standard partial cut, or `cut(CUT_MODE.FULL, 0)` for a full cut with no extra feed.
 </Note>
 
 ---
@@ -277,6 +274,3 @@ try {
 }
 ```
 
-<Accordion title="Why is there no tail cut in this example?">
-  The plugin appends a tail `{ "Cut": { "mode": "partial", "feed": 0 } }` automatically at the end of every job. Because an explicit `Cut` section is already present in `sections` (with `mode: "full"`), both cuts will fire: the explicit full cut in the middle of the job first, followed by the automatic partial cut at the very end. If you want **only** the explicit cut, you can still rely on the automatic one if it is partial — or simply be aware that both will execute.
-</Accordion>

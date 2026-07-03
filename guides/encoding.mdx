@@ -1,5 +1,5 @@
 ---
-title: "Character Encoding and Code Page Configuration"
+title: "Character Encoding and Code Page Configuration Guide"
 sidebarTitle: "Encoding"
 description: "How to configure ESC/POS code pages, choose host-side encodings, handle accented characters, and print Asian text reliably across all printer models."
 ---
@@ -114,9 +114,9 @@ The full set of available encode values exported by the plugin:
 | Constant | Script / Region |
 |---|---|
 | `ENCODE.ACCENT_REMOVER` | Transliterates to ASCII (plugin-specific) |
-| `ENCODE.WINDOWS_1252` | Western European (Latin-1 superset) |
 | `ENCODE.WINDOWS_1250` | Central European |
 | `ENCODE.WINDOWS_1251` | Cyrillic |
+| `ENCODE.WINDOWS_1252` | Western European (Latin-1 superset) |
 | `ENCODE.WINDOWS_1253` | Greek |
 | `ENCODE.WINDOWS_1254` | Turkish |
 | `ENCODE.WINDOWS_1255` | Hebrew |
@@ -132,15 +132,28 @@ The full set of available encode values exported by the plugin:
 | `ENCODE.EUC_KR` | Korean |
 | `ENCODE.ISO_2022_JP` | Japanese (7-bit) |
 | `ENCODE.ISO_8859_2` | Central European |
+| `ENCODE.ISO_8859_3` | South European / Esperanto |
+| `ENCODE.ISO_8859_4` | North European |
 | `ENCODE.ISO_8859_5` | Cyrillic |
+| `ENCODE.ISO_8859_6` | Arabic |
 | `ENCODE.ISO_8859_7` | Greek |
-| `ENCODE.ISO_8859_8` | Hebrew |
+| `ENCODE.ISO_8859_8` | Hebrew (visual) |
+| `ENCODE.ISO_8859_8_I` | Hebrew (logical) |
+| `ENCODE.ISO_8859_10` | Nordic |
+| `ENCODE.ISO_8859_13` | Baltic Rim |
+| `ENCODE.ISO_8859_14` | Celtic |
 | `ENCODE.ISO_8859_15` | Western European (with €) |
+| `ENCODE.ISO_8859_16` | South-Eastern European |
 | `ENCODE.KOI8_R` | Russian |
 | `ENCODE.KOI8_U` | Ukrainian |
-| `ENCODE.UTF_8` | Unicode (UTF-8) |
 | `ENCODE.IBM866` | Cyrillic (DOS) |
 | `ENCODE.MACINTOSH` | Mac Roman |
+| `ENCODE.X_MAC_CYRILLIC` | Mac Cyrillic |
+| `ENCODE.UTF_8` | Unicode (UTF-8) |
+| `ENCODE.UTF_16BE` | Unicode (UTF-16 Big Endian) |
+| `ENCODE.UTF_16LE` | Unicode (UTF-16 Little Endian) |
+| `ENCODE.REPLACEMENT` | Replacement encoding (security) |
+| `ENCODE.X_USER_DEFINED` | User-defined single-byte |
 </Accordion>
 
 ## Choosing the Right code_page

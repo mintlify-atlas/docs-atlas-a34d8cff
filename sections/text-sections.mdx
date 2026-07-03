@@ -198,8 +198,8 @@ The `Table` section renders a multi-column grid. Columns can have custom widths 
   Optional array of header cells. Must contain exactly `columns` elements if provided.
 </ParamField>
 
-<ParamField body="truncate" type="boolean">
-  When `true`, long cell text is truncated to fit its column. When `false` (default), text wraps. Defaults to `false` in JSON; the `table()` builder defaults to `true`.
+<ParamField body="truncate" type="boolean" required>
+  When `true`, long cell text is truncated to fit its column width. When `false`, text wraps onto the next line. The `table()` builder defaults to `true`.
 </ParamField>
 
 <CodeGroup>
@@ -213,7 +213,8 @@ The `Table` section renders a multi-column grid. Columns can have custom widths 
         { "text": "Americano" },
         { "text": "$2.50" }
       ]
-    ]
+    ],
+    "truncate": false
   }
 }
 ```
