@@ -1,0 +1,636 @@
+---
+title: "TypeScript API Types & Interfaces — Thermal Printer"
+sidebarTitle: "Types"
+description: "Complete reference for every TypeScript interface, type alias, and union exported by tauri-plugin-thermal-printer, with field-level documentation."
+---
+
+Every type described here is exported from `tauri-plugin-thermal-printer` and can be imported directly. Interfaces describe the shape of objects you pass to or receive from the three main functions; the `PrintSections` union type is the building block of every print job's `sections` array.
+
+---
+
+## `PrintJobRequest`
+
+The top-level object passed to [`print_thermal_printer`](/api/functions#print_thermal_printer). It describes the target printer, the paper size, the encoding options, and the ordered list of sections to render.
+
+```typescript
+interface PrintJobRequest {
+  printer: string
+  sections: PrintSections[]
+  options: CodePage
+  paper_size: PaperSize
+}
+```
+
+<ParamField body="printer" type="string" required>
+  Name of the printer as registered with the OS (e.g. `"TM-T20II"`). On Android, supply the Bluetooth MAC address (e.g. `"AA:BB:CC:DD:EE:FF"`).
+</ParamField>
+
+<ParamField body="sections" type="PrintSections[]" required>
+  Ordered array of content sections. See [`PrintSections`](#printsections) for all supported variants.
+</ParamField>
+
+<ParamField body="options" type="CodePage" required>
+  ESC/POS code page selection and host-side encoding strategy. See [`CodePage`](#codepage).
+</ParamField>
+
+<ParamField body="paper_size" type="PaperSize" default="Mm80">
+  Roll width. See [`PaperSize`](#papersize) for available values and their character/pixel metrics.
+</ParamField>
+
+---
+
+## `PrinterInfo`
+
+Returned as elements of the array from [`list_thermal_printers`](/api/functions#list_thermal_printers).
+
+```typescript
+interface PrinterInfo {
+  name: string
+  interface_type: string
+  identifier: string
+  status: string
+}
+```
+
+<ResponseField name="name" type="string">
+  Human-readable printer name as registered with the OS (e.g. `"TM-T20II"`).
+</ResponseField>
+
+<ResponseField name="interface_type" type="string">
+  Connection interface type (e.g. `"USB"`, `"NETWORK"`, `"BLUETOOTH"`).
+</ResponseField>
+
+<ResponseField name="identifier" type="string">
+  Unique device identifier such as a USB URI or `"IP:PORT"` string (e.g. `"192.168.1.100:9100"`).
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current printer status (e.g. `"IDLE"`, `"BUSY"`).
+</ResponseField>
+
+---
+
+## `CodePage`
+
+Controls two independent concerns: the ESC/POS code-page command sent to the printer (`ESC t n`) and the host-side character encoding applied before bytes are transmitted.
+
+```typescript
+interface CodePage {
+  code_page: number
+  encode?: Encode
+  use_gbk?: boolean
+}
+```
+
+<ParamField body="code_page" type="number" required>
+  Raw value for the `ESC t n` command. Each printer model maps its own page numbers; consult your printer's programming manual.
+</ParamField>
+
+<ParamField body="encode" type="Encode" default="ACCENT_REMOVER">
+  Host-side encoding applied to all text sections. `ENCODE.ACCENT_REMOVER` transliterates accented characters to plain ASCII before transmission (`á → a`, `ß → ss`, `€ → EUR`). All other values come from `encoding_rs` statics. See [`ENCODE`](/api/constants#encode).
+</ParamField>
+
+<ParamField body="use_gbk" type="boolean" default="false">
+  When `true`, characters that the selected `encode` cannot represent are retried with GBK before falling back to raw UTF-8 bytes.
+</ParamField>
+
+---
+
+## `GlobalStyles`
+
+Optional style overrides applied to a text section. When used as a `PrintSections` variant (`{ GlobalStyles: ... }`), the styles become the default for all subsequent text sections until changed again.
+
+```typescript
+interface GlobalStyles {
+  bold?: boolean
+  underline?: boolean
+  align?: TextAlign
+  italic?: boolean
+  invert?: boolean
+  font?: TextFont
+  rotate?: boolean
+  upside_down?: boolean
+  size?: TextSize
+}
+```
+
+<ParamField body="bold" type="boolean">
+  Bold text.
+</ParamField>
+
+<ParamField body="underline" type="boolean">
+  Underlined text.
+</ParamField>
+
+<ParamField body="align" type="TextAlign">
+  Horizontal alignment — `'left'` | `'center'` | `'right'`.
+</ParamField>
+
+<ParamField body="italic" type="boolean">
+  Italic text (hardware support varies by printer model).
+</ParamField>
+
+<ParamField body="invert" type="boolean">
+  White text on a black background.
+</ParamField>
+
+<ParamField body="font" type="TextFont">
+  Printer font — `'A'` | `'B'` | `'C'`.
+</ParamField>
+
+<ParamField body="rotate" type="boolean">
+  Rotate text 90 degrees clockwise.
+</ParamField>
+
+<ParamField body="upside_down" type="boolean">
+  Print text upside down.
+</ParamField>
+
+<ParamField body="size" type="TextSize">
+  Character size — `'normal'` | `'height'` | `'width'` | `'double'`.
+</ParamField>
+
+---
+
+## `PaperSize`
+
+String literal union that identifies the roll width. Use `DEFAULT_PAPER_SIZE` (`'Mm80'`) when in doubt.
+
+```typescript
+type PaperSize =
+  | 'Mm40'
+  | 'Mm44'
+  | 'Mm58'
+  | 'Mm72'
+  | 'Mm80'
+  | 'Mm104'
+```
+
+| Value | Paper Width | Chars / Line | Pixels Width | Typical Use |
+|---|---|---|---|---|
+| `'Mm40'` | 40 mm | 21 | 256 | Handheld ticket printers |
+| `'Mm44'` | 44 mm | 24 | 288 | Compact POS |
+| `'Mm58'` | 58 mm | 32 | 384 | Small format, portable |
+| `'Mm72'` | 72 mm | 42 | 512 | Mid-range printers |
+| `'Mm80'` | 80 mm | 48 | 576 | Standard large format (default) |
+| `'Mm104'` | 104 mm | 62 | 752 | Wide format |
+
+---
+
+## `PrintSections`
+
+A discriminated union of all 16 printable section variants. Every element of the `sections` array in `PrintJobRequest` must be one of these shapes.
+
+```typescript
+type PrintSections =
+  | { Title: Title }
+  | { Subtitle: Subtitle }
+  | { Text: Text }
+  | { Feed: Feed }
+  | { Cut: Cut }
+  | { Beep: Beep }
+  | { Drawer: Drawer }
+  | { GlobalStyles: GlobalStyles }
+  | { Qr: Qr }
+  | { Barcode: Barcode }
+  | { Table: Table }
+  | { DataMatrix: DataMatrixModel }
+  | { Pdf417: Pdf417 }
+  | { Image: Image }
+  | { Logo: Logo }
+  | { Line: Line }
+```
+
+<Tip>
+  Use the [builder helpers](/api/builders) — `title()`, `text()`, `qr()`, etc. — to construct these objects without writing the wrapper key by hand.
+</Tip>
+
+---
+
+## `TestPrintRequest`
+
+Passed to [`test_thermal_printer`](/api/functions#test_thermal_printer). All fields except `printer_info` are optional.
+
+```typescript
+interface TestPrintRequest {
+  printer_info: PrintJobRequest
+  include_text?: boolean
+  include_custom_text?: boolean
+  custom_text?: string | null
+  include_text_styles?: boolean
+  include_alignment?: boolean
+  include_columns?: boolean
+  include_separators?: boolean
+  include_barcode?: boolean
+  include_barcode_types?: boolean
+  include_qr?: boolean
+  include_image?: boolean
+  image_base64?: string | null
+  include_beep?: boolean
+  test_cash_drawer?: boolean
+  cut_paper?: boolean
+  test_feed?: boolean
+  test_all_fonts?: boolean
+  test_invert?: boolean
+  test_rotate?: boolean
+}
+```
+
+<ParamField body="printer_info" type="PrintJobRequest" required>
+  Printer configuration. The `sections` array is ignored — the backend generates all test content from the flags below.
+</ParamField>
+
+<ParamField body="include_text" type="boolean" default="false">
+  Print a basic text sample.
+</ParamField>
+
+<ParamField body="include_custom_text" type="boolean" default="false">
+  Print the string in `custom_text`.
+</ParamField>
+
+<ParamField body="custom_text" type="string | null" default="null">
+  Custom text printed when `include_custom_text` is `true`.
+</ParamField>
+
+<ParamField body="include_text_styles" type="boolean" default="false">
+  Print bold, underline, and inverted style samples.
+</ParamField>
+
+<ParamField body="include_alignment" type="boolean" default="false">
+  Print left, center, and right alignment samples.
+</ParamField>
+
+<ParamField body="include_columns" type="boolean" default="false">
+  Print a multi-column table sample.
+</ParamField>
+
+<ParamField body="include_separators" type="boolean" default="false">
+  Print horizontal separator line samples.
+</ParamField>
+
+<ParamField body="include_barcode" type="boolean" default="false">
+  Print a CODE128 barcode sample.
+</ParamField>
+
+<ParamField body="include_barcode_types" type="boolean" default="false">
+  Print one sample for each supported barcode type.
+</ParamField>
+
+<ParamField body="include_qr" type="boolean" default="false">
+  Print a QR code sample.
+</ParamField>
+
+<ParamField body="include_image" type="boolean" default="false">
+  Print the image provided in `image_base64`.
+</ParamField>
+
+<ParamField body="image_base64" type="string | null" default="null">
+  Base64-encoded image used when `include_image` is `true`.
+</ParamField>
+
+<ParamField body="include_beep" type="boolean" default="false">
+  Emit an audible beep.
+</ParamField>
+
+<ParamField body="test_cash_drawer" type="boolean" default="false">
+  Open the cash drawer.
+</ParamField>
+
+<ParamField body="cut_paper" type="boolean" default="false">
+  Cut the paper at the end of the test.
+</ParamField>
+
+<ParamField body="test_feed" type="boolean" default="false">
+  Run a paper-feed test.
+</ParamField>
+
+<ParamField body="test_all_fonts" type="boolean" default="false">
+  Print a sample in every available font (A, B, C).
+</ParamField>
+
+<ParamField body="test_invert" type="boolean" default="false">
+  Print an inverted-text sample.
+</ParamField>
+
+<ParamField body="test_rotate" type="boolean" default="false">
+  Print a 90°-rotated text sample.
+</ParamField>
+
+---
+
+## Section Interfaces
+
+Each variant of `PrintSections` wraps one of the following interfaces.
+
+### `Title`
+
+Prints text with forced double size and center alignment.
+
+```typescript
+interface Title {
+  text: string
+  styles?: GlobalStyles
+}
+```
+
+<ParamField body="text" type="string" required>Text to print.</ParamField>
+<ParamField body="styles" type="GlobalStyles">Optional style overrides. Defaults force double size and center alignment.</ParamField>
+
+---
+
+### `Subtitle`
+
+Prints text with forced bold and increased height.
+
+```typescript
+interface Subtitle {
+  text: string
+  styles?: GlobalStyles
+}
+```
+
+<ParamField body="text" type="string" required>Text to print.</ParamField>
+<ParamField body="styles" type="GlobalStyles">Optional style overrides. Defaults force bold and height size.</ParamField>
+
+---
+
+### `Text`
+
+Prints body text with fully optional styles.
+
+```typescript
+interface Text {
+  text: string
+  styles?: GlobalStyles
+}
+```
+
+<ParamField body="text" type="string" required>Text to print.</ParamField>
+<ParamField body="styles" type="GlobalStyles">Optional style overrides. Inherits current global styles when omitted.</ParamField>
+
+---
+
+### `Feed`
+
+Advances the paper.
+
+```typescript
+interface Feed {
+  feed_type: FeedType
+  value: number
+}
+```
+
+<ParamField body="feed_type" type="FeedType" required>
+  `'lines'` — advance N lines (`ESC d n`); `'dots'` — advance N dot rows (`ESC J n`); `'line_feed'` — send N raw LF characters.
+</ParamField>
+<ParamField body="value" type="number" required>Amount to advance.</ParamField>
+
+---
+
+### `Cut`
+
+Cuts the paper.
+
+```typescript
+interface Cut {
+  mode: CutMode
+  feed: number
+}
+```
+
+<ParamField body="mode" type="CutMode" required>
+  `'full'`, `'partial'`, `'partial_alt'`, or `'partial_alt2'`. See [`CutMode`](#primitive-type-aliases).
+</ParamField>
+<ParamField body="feed" type="number" required>Lines to advance before cutting.</ParamField>
+
+---
+
+### `Beep`
+
+Emits an audible beep via the printer's buzzer.
+
+```typescript
+interface Beep {
+  times: number
+  duration: number
+}
+```
+
+<ParamField body="times" type="number" required>Number of beeps (1–9).</ParamField>
+<ParamField body="duration" type="number" required>Duration per beep in milliseconds (1–255).</ParamField>
+
+---
+
+### `Drawer`
+
+Opens the cash drawer.
+
+```typescript
+interface Drawer {
+  pin: 2 | 5
+  pulse_time: number
+}
+```
+
+<ParamField body="pin" type="2 | 5" required>Drawer kick pin number.</ParamField>
+<ParamField body="pulse_time" type="number" required>Kick pulse duration in milliseconds.</ParamField>
+
+---
+
+### `Table`
+
+Prints a columnar table. Column widths must sum to the paper's `chars_per_line` when provided.
+
+```typescript
+interface Table {
+  columns: number
+  column_widths?: number[]
+  header?: Text[]
+  body: Text[][]
+  truncate: boolean
+}
+```
+
+<ParamField body="columns" type="number" required>Number of columns.</ParamField>
+<ParamField body="column_widths" type="number[]">
+  Per-column widths in characters. Length must equal `columns` and the sum must equal the paper's chars/line (e.g. 48 for `Mm80`). Evenly distributed when omitted.
+</ParamField>
+<ParamField body="header" type="Text[]">Optional column header cells — must have exactly `columns` elements.</ParamField>
+<ParamField body="body" type="Text[][]" required>Data rows — each row must have exactly `columns` cells.</ParamField>
+<ParamField body="truncate" type="boolean" required>
+  When `true`, cell text that exceeds its column width is truncated. When `false`, long text wraps.
+</ParamField>
+
+---
+
+### `Qr`
+
+Prints a QR code.
+
+```typescript
+interface Qr {
+  data: string
+  size: number
+  error_correction: QrErrorCorrection
+  model: 1 | 2
+  align?: TextAlign
+}
+```
+
+<ParamField body="data" type="string" required>QR payload. Must not be empty. Max length depends on error-correction level.</ParamField>
+<ParamField body="size" type="number" required>Module size 1–16 (recommended 5–6).</ParamField>
+<ParamField body="error_correction" type="QrErrorCorrection" required>
+  `'L'` (7%, 7089 chars max) | `'M'` (15%, 4296 chars) | `'Q'` (25%, 2953 chars) | `'H'` (30%, 1817 chars).
+</ParamField>
+<ParamField body="model" type="1 | 2" required>QR model. Model 2 is recommended.</ParamField>
+<ParamField body="align" type="TextAlign">Horizontal alignment. Defaults to current global alignment.</ParamField>
+
+---
+
+### `Barcode`
+
+Prints a 1-D barcode.
+
+```typescript
+interface Barcode {
+  data: string
+  barcode_type: BarcodeType
+  width: number
+  height: number
+  text_position: BarcodeTextPosition
+  align?: TextAlign
+}
+```
+
+<ParamField body="data" type="string" required>
+  Barcode payload. Must not be empty. Numeric-only types (`UPC-A`, `UPC-E`, `EAN13`, `EAN8`, `ITF`) accept only digit characters.
+</ParamField>
+<ParamField body="barcode_type" type="BarcodeType" required>
+  One of: `'UPC-A'` | `'UPC-E'` | `'EAN13'` | `'EAN8'` | `'CODE39'` | `'ITF'` | `'CODABAR'` | `'CODE93'` | `'CODE128'`.
+</ParamField>
+<ParamField body="width" type="number" required>Bar module width 2–6.</ParamField>
+<ParamField body="height" type="number" required>Bar height in dots (must be greater than 0).</ParamField>
+<ParamField body="text_position" type="BarcodeTextPosition" required>
+  `'none'` | `'above'` | `'below'` | `'both'`.
+</ParamField>
+<ParamField body="align" type="TextAlign">Horizontal alignment. Defaults to current global alignment.</ParamField>
+
+---
+
+### `DataMatrixModel`
+
+Prints a DataMatrix 2-D code.
+
+```typescript
+interface DataMatrixModel {
+  data: string
+  size: number
+}
+```
+
+<ParamField body="data" type="string" required>DataMatrix payload.</ParamField>
+<ParamField body="size" type="number" required>Module size 1–16.</ParamField>
+
+---
+
+### `Pdf417`
+
+Prints a PDF417 stacked barcode.
+
+```typescript
+interface Pdf417 {
+  data: string
+  columns: number
+  rows: number
+  width: number
+  height: number
+  error_correction: number
+}
+```
+
+<ParamField body="data" type="string" required>PDF417 payload.</ParamField>
+<ParamField body="columns" type="number" required>`0` for auto, or `1–30` data columns.</ParamField>
+<ParamField body="rows" type="number" required>`0` for auto, or `3–90` data rows.</ParamField>
+<ParamField body="width" type="number" required>Module width `2–8`.</ParamField>
+<ParamField body="height" type="number" required>Row height `2–8`.</ParamField>
+<ParamField body="error_correction" type="number" required>Error correction level `0–8`.</ParamField>
+
+---
+
+### `Image`
+
+Prints a raster image. Base64 strings with or without a `data:` URI prefix are both accepted.
+
+```typescript
+interface Image {
+  data: string
+  max_width: number
+  align: TextAlign
+  dithering: boolean
+  size: ImageMode
+}
+```
+
+<ParamField body="data" type="string" required>Base64-encoded image. Must not be empty.</ParamField>
+<ParamField body="max_width" type="number" required>
+  Maximum output width in pixels. `0` (or values larger than the paper width) are automatically clamped to the paper width.
+</ParamField>
+<ParamField body="align" type="TextAlign" required>Horizontal alignment: `'left'` | `'center'` | `'right'`.</ParamField>
+<ParamField body="dithering" type="boolean" required>
+  Apply Floyd-Steinberg dithering for better quality on monochrome printers.
+</ParamField>
+<ParamField body="size" type="ImageMode" required>
+  Print scale — `'normal'` | `'double_width'` | `'double_height'` | `'quadruple'`.
+</ParamField>
+
+---
+
+### `Logo`
+
+Prints a logo image previously stored in the printer's NV memory.
+
+```typescript
+interface Logo {
+  key_code: number
+  mode: ImageMode
+}
+```
+
+<ParamField body="key_code" type="number" required>NV memory key code (1–255).</ParamField>
+<ParamField body="mode" type="ImageMode" required>Print scale — `'normal'` | `'double_width'` | `'double_height'` | `'quadruple'`.</ParamField>
+
+---
+
+### `Line`
+
+Prints a full-width horizontal separator by repeating a single character across the paper.
+
+```typescript
+interface Line {
+  character: string
+}
+```
+
+<ParamField body="character" type="string" required>
+  The character to repeat (e.g. `'-'`, `'='`, `'_'`). Must be a single character.
+</ParamField>
+
+---
+
+## Primitive Type Aliases
+
+These string-literal unions are used throughout the interfaces above and are exported as both types and [constant objects](/api/constants).
+
+| Type | Values |
+|---|---|
+| `TextAlign` | `'left'` \| `'center'` \| `'right'` |
+| `TextSize` | `'normal'` \| `'height'` \| `'width'` \| `'double'` |
+| `TextFont` | `'A'` \| `'B'` \| `'C'` |
+| `BarcodeType` | `'UPC-A'` \| `'UPC-E'` \| `'EAN13'` \| `'EAN8'` \| `'CODE39'` \| `'ITF'` \| `'CODABAR'` \| `'CODE93'` \| `'CODE128'` |
+| `BarcodeTextPosition` | `'none'` \| `'above'` \| `'below'` \| `'both'` |
+| `QrErrorCorrection` | `'L'` \| `'M'` \| `'Q'` \| `'H'` |
+| `ImageMode` | `'normal'` \| `'double_width'` \| `'double_height'` \| `'quadruple'` |
+| `FeedType` | `'lines'` \| `'dots'` \| `'line_feed'` |
+| `CutMode` | `'full'` \| `'partial'` \| `'partial_alt'` \| `'partial_alt2'` |
+| `Encode` | All keys of the [`ENCODE`](/api/constants#encode) constant object |

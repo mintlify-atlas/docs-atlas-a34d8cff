@@ -1,0 +1,352 @@
+---
+title: "QR, Barcode & 2D Code Section Types for Printers"
+sidebarTitle: "Codes & Barcodes"
+description: "Print QR codes, barcodes, DataMatrix, and PDF417 symbols on thermal printers using validated section types with configurable size and error correction."
+---
+
+Code sections let you embed machine-readable symbols directly in a print job. The plugin supports the four most common code families used in retail, logistics, and ticketing: **QR codes**, **1D barcodes**, **DataMatrix**, and **PDF417**. Every code section is validated in Rust before ESC/POS bytes are generated — invalid data or out-of-range parameters throw a descriptive error string that you can catch and display.
+
+## Qr
+
+The `Qr` section renders a QR code symbol. QR codes are the most versatile 2D code format — they handle URLs, plain text, and arbitrary UTF-8 data, and are readable by every modern smartphone camera.
+
+<ParamField body="data" type="string" required>
+  The content to encode. **Must not be empty.** Maximum length depends on the `error_correction` level — the backend throws a descriptive error if the limit is exceeded.
+</ParamField>
+
+<ParamField body="size" type="number" required>
+  Module size in pixels per dot (1–16). Recommended: 5–6 for 80 mm paper.
+</ParamField>
+
+<ParamField body="error_correction" type='"L" | "M" | "Q" | "H"' required>
+  Error correction level. Higher levels increase recoverability but reduce maximum data capacity. Default in the builder: `"M"`.
+</ParamField>
+
+<ParamField body="model" type="1 | 2" required>
+  QR model variant. Model 2 is the modern standard and supports larger data. Default: `2`.
+</ParamField>
+
+<ParamField body="align" type='"left" | "center" | "right"'>
+  Horizontal alignment. Falls back to the current global alignment when omitted.
+</ParamField>
+
+### Error correction reference
+
+| Level | Recovery | Max chars (numeric) | Max chars (alphanumeric) | Max chars (binary) |
+|-------|----------|--------------------|--------------------------|--------------------|
+| `"L"` | ~7% | 7 089 | 4 296 | 2 953 |
+| `"M"` | ~15% | 4 296 | 2 594 | 1 817 |
+| `"Q"` | ~25% | 2 953 | 1 788 | 1 233 |
+| `"H"` | ~30% | 1 817 | 1 101 | 784 |
+
+<CodeGroup>
+```json Minimal
+{
+  "Qr": {
+    "data": "https://example.com",
+    "size": 6,
+    "error_correction": "M",
+    "model": 2
+  }
+}
+```
+
+```json Centered, high error correction
+{
+  "Qr": {
+    "data": "TICKET-A1234567-EVENT2025",
+    "size": 6,
+    "error_correction": "H",
+    "model": 2,
+    "align": "center"
+  }
+}
+```
+
+```typescript Builder
+import { qr, QR_ERROR_CORRECTION, TEXT_ALIGN } from "tauri-plugin-thermal-printer";
+
+// Default options (size=6, error_correction="M", model=2)
+qr("https://example.com")
+
+// Custom options
+qr("TICKET-A1234567-EVENT2025", {
+  size: 6,
+  error_correction: QR_ERROR_CORRECTION.H,
+  model: 2,
+  align: TEXT_ALIGN.CENTER,
+})
+```
+</CodeGroup>
+
+<Warning>
+  If `data` exceeds the maximum length for the chosen `error_correction` level, the backend throws:
+  `"QR data length N exceeds maximum M for error correction level 'X'"`.
+  Use a lower error correction level or shorten the data string.
+</Warning>
+
+---
+
+## Barcode
+
+The `Barcode` section prints a 1D linear barcode. Nine symbologies are supported covering retail, inventory, and general-purpose use cases.
+
+<ParamField body="data" type="string" required>
+  The barcode data string. **Must not be empty.** Numeric-only symbologies (`UPC-A`, `UPC-E`, `EAN13`, `EAN8`, `ITF`) accept **digits only** — the backend throws if any non-digit character is detected.
+</ParamField>
+
+<ParamField body="barcode_type" type="string" required>
+  The barcode symbology. See the [barcode type table](#barcode-type-reference) below.
+</ParamField>
+
+<ParamField body="width" type="number" required>
+  Module (bar) width. Range: 1–6. Recommended: 2–3.
+</ParamField>
+
+<ParamField body="height" type="number" required>
+  Barcode height in printer dots. Must be greater than 0. Recommended: 50–100.
+</ParamField>
+
+<ParamField body="text_position" type='"none" | "above" | "below" | "both"' required>
+  Where to print the human-readable text (HRT) relative to the bars. Use `"none"` to suppress it entirely.
+</ParamField>
+
+<ParamField body="align" type='"left" | "center" | "right"'>
+  Horizontal alignment. Falls back to the current global alignment when omitted.
+</ParamField>
+
+### Barcode type reference
+
+| Symbology | `barcode_type` value | Data type | Typical use |
+|-----------|---------------------|-----------|-------------|
+| Universal Product Code A | `"UPC-A"` | 12 digits | US/Canada retail |
+| Universal Product Code E | `"UPC-E"` | 8 digits (compressed) | Small package retail |
+| EAN-13 | `"EAN13"` | 13 digits | International retail |
+| EAN-8 | `"EAN8"` | 8 digits | Small package retail |
+| Code 39 | `"CODE39"` | Uppercase A–Z, 0–9, symbols | Inventory, healthcare |
+| Interleaved 2 of 5 | `"ITF"` | Even-length digits | Shipping cartons |
+| Codabar | `"CODABAR"` | 0–9, A–D, special chars | Libraries, blood banks |
+| Code 93 | `"CODE93"` | Full ASCII | High-density alphanumeric |
+| Code 128 | `"CODE128"` | Full ASCII | General-purpose (recommended) |
+
+<CodeGroup>
+```json EAN-13 barcode
+{
+  "Barcode": {
+    "data": "5901234123457",
+    "barcode_type": "EAN13",
+    "width": 2,
+    "height": 60,
+    "text_position": "below",
+    "align": "center"
+  }
+}
+```
+
+```json CODE128 (general purpose)
+{
+  "Barcode": {
+    "data": "ORDER-A1234567",
+    "barcode_type": "CODE128",
+    "width": 3,
+    "height": 80,
+    "text_position": "below"
+  }
+}
+```
+
+```typescript Builder
+import { barcode, BARCODE_TYPE, BARCODE_TEXT_POSITION, TEXT_ALIGN } from "tauri-plugin-thermal-printer";
+
+// EAN-13 centered
+barcode("5901234123457", BARCODE_TYPE.EAN13, {
+  width: 2,
+  height: 60,
+  text_position: BARCODE_TEXT_POSITION.BELOW,
+  align: TEXT_ALIGN.CENTER,
+})
+
+// CODE128 with defaults (width=3, height=80, text_position="below")
+barcode("ORDER-A1234567", BARCODE_TYPE.CODE128)
+```
+</CodeGroup>
+
+<Warning>
+  **Numeric-only types reject non-digit characters.** If `data` contains any character other than `0–9` for `UPC-A`, `UPC-E`, `EAN13`, `EAN8`, or `ITF`, the backend throws:
+  `"Barcode type 'EAN13' only accepts numeric digits"`.
+</Warning>
+
+---
+
+## DataMatrix
+
+The `DataMatrix` section renders a compact 2D matrix code. DataMatrix codes pack data into a very small physical footprint — useful when space is tight but you still need to encode identifiers, serial numbers, or short URLs.
+
+<ParamField body="data" type="string" required>
+  The data string to encode.
+</ParamField>
+
+<ParamField body="size" type="number" required>
+  Module size (1–16). The builder default is `6`.
+</ParamField>
+
+<CodeGroup>
+```json
+{
+  "DataMatrix": {
+    "data": "SN-A8821-2025",
+    "size": 6
+  }
+}
+```
+
+```typescript Builder
+import { dataMatrix } from "tauri-plugin-thermal-printer";
+
+// Default size (6)
+dataMatrix("SN-A8821-2025")
+
+// Custom size
+dataMatrix("SN-A8821-2025", 8)
+```
+</CodeGroup>
+
+---
+
+## Pdf417
+
+The `Pdf417` section prints a PDF417 stacked 2D barcode. PDF417 can encode large amounts of data (including binary) and is commonly used on shipping labels, boarding passes, and government IDs. Rows and columns can be set to `0` to let the encoder choose automatically.
+
+<ParamField body="data" type="string" required>
+  The data string to encode.
+</ParamField>
+
+<ParamField body="columns" type="number" required>
+  Number of data columns. `0` = auto-select; otherwise 1–30.
+</ParamField>
+
+<ParamField body="rows" type="number" required>
+  Number of data rows. `0` = auto-select; otherwise 3–90.
+</ParamField>
+
+<ParamField body="width" type="number" required>
+  Module width (2–8). Controls how wide each module column is. Default: `2`.
+</ParamField>
+
+<ParamField body="height" type="number" required>
+  Row height (2–8). Controls how tall each symbol row is. Default: `3`.
+</ParamField>
+
+<ParamField body="error_correction" type="number" required>
+  Error correction level (0–8). Higher values add more redundancy. Default: `2`.
+</ParamField>
+
+<CodeGroup>
+```json Auto layout (columns=0, rows=0)
+{
+  "Pdf417": {
+    "data": "INVOICE|2025-01-15|$149.00|PAID",
+    "columns": 0,
+    "rows": 0,
+    "width": 2,
+    "height": 3,
+    "error_correction": 2
+  }
+}
+```
+
+```json Fixed layout
+{
+  "Pdf417": {
+    "data": "INVOICE|2025-01-15|$149.00|PAID",
+    "columns": 4,
+    "rows": 8,
+    "width": 3,
+    "height": 4,
+    "error_correction": 4
+  }
+}
+```
+
+```typescript Builder
+import { pdf417 } from "tauri-plugin-thermal-printer";
+
+// Auto layout with defaults (columns=0, rows=0, width=2, height=3, error_correction=2)
+pdf417("INVOICE|2025-01-15|$149.00|PAID")
+
+// Fixed layout
+pdf417("INVOICE|2025-01-15|$149.00|PAID", {
+  columns: 4,
+  rows: 8,
+  width: 3,
+  height: 4,
+  error_correction: 4,
+})
+```
+</CodeGroup>
+
+---
+
+## Complete example
+
+The snippet below shows all four code sections used together in a single receipt job.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title, subtitle, text, line, feed, cut,
+  qr, barcode, dataMatrix, pdf417,
+  QR_ERROR_CORRECTION, BARCODE_TYPE, BARCODE_TEXT_POSITION,
+  TEXT_ALIGN, ENCODE,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+  sections: [
+    title("EVENT TICKET"),
+    subtitle("Rock Night 2025"),
+    line("="),
+    text("Scan QR to verify:"),
+    qr("https://tickets.example.com/verify/A-1234567", {
+      size: 6,
+      error_correction: QR_ERROR_CORRECTION.H,
+      model: 2,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    line("-"),
+    text("Product barcode:"),
+    barcode("5901234123457", BARCODE_TYPE.EAN13, {
+      width: 2,
+      height: 60,
+      text_position: BARCODE_TEXT_POSITION.BELOW,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    line("-"),
+    text("Serial number (DataMatrix):"),
+    dataMatrix("SN-A8821-2025", 6),
+    line("-"),
+    text("PDF417 payload:"),
+    pdf417("A-1234567|TOTAL=49.00|PAID", {
+      columns: 0,
+      rows: 0,
+      width: 2,
+      height: 3,
+      error_correction: 2,
+    }),
+    feed(3),
+    cut(),
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+} catch (error) {
+  // error is a string, e.g.:
+  // "QR data length 5000 exceeds maximum 4296 for error correction level 'M'"
+  // "Barcode type 'EAN13' only accepts numeric digits"
+  console.error("Print failed:", error);
+}
+```

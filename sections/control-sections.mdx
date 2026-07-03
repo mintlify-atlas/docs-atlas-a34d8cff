@@ -1,0 +1,282 @@
+---
+title: "Control Section Types: Feed, Cut, Beep & Drawer"
+sidebarTitle: "Control"
+description: "Control thermal printer hardware actions — paper feed, paper cut, acoustic beep, and cash drawer pulse — using dedicated control sections in your print job."
+---
+
+Control sections manage the physical actions a thermal printer can perform beyond printing text and graphics. Rather than embedding raw ESC/POS commands yourself, you add declarative control sections to your `sections` array and the plugin translates each one into the appropriate binary command sequence. The four control sections — `Feed`, `Cut`, `Beep`, and `Drawer` — cover the full range of hardware operations you are likely to need in a POS or ticketing application.
+
+## Feed
+
+The `Feed` section advances the paper by a specified amount without printing any content. Use it to add blank space between sections, or to position the paper before a cut so the printed content clears the paper slot.
+
+Three feed modes are available, corresponding to different ESC/POS commands:
+
+<ParamField body="feed_type" type='"lines" | "dots" | "line_feed"' required>
+  The paper advance method:
+  - `"lines"` — `ESC d n`: advance exactly N full text lines. The most common mode.
+  - `"dots"` — `ESC J n`: advance N dot rows. Gives finer sub-line control.
+  - `"line_feed"` — sends N raw LF (`\n`) characters. Behavior depends on the printer's configured line spacing.
+</ParamField>
+
+<ParamField body="value" type="number" required>
+  How much to advance. For `"lines"` and `"line_feed"`, this is a line count. For `"dots"`, this is a dot-row count (0–255).
+</ParamField>
+
+<CodeGroup>
+```json Advance 3 lines
+{
+  "Feed": {
+    "feed_type": "lines",
+    "value": 3
+  }
+}
+```
+
+```json Advance 24 dot rows
+{
+  "Feed": {
+    "feed_type": "dots",
+    "value": 24
+  }
+}
+```
+
+```json 2 raw line feeds
+{
+  "Feed": {
+    "feed_type": "line_feed",
+    "value": 2
+  }
+}
+```
+
+```typescript Builder
+import { feed } from "tauri-plugin-thermal-printer";
+
+// Default feed_type is "lines"
+feed(3)
+
+// Explicit type
+feed(24, "dots")
+feed(2,  "line_feed")
+```
+</CodeGroup>
+
+<Note>
+  A `Feed` before `Cut` ensures the printed content is fully past the cutter blade and does not get cut through. Three lines is a common default: `feed(3)` followed by `cut()`.
+</Note>
+
+---
+
+## Cut
+
+The `Cut` section triggers the printer's paper cutter. Four cut modes are provided to match the varying capabilities of different printer models. A partial cut is the safest default — it leaves a small perforation so the receipt stays attached until the customer tears it off.
+
+<ParamField body="mode" type='"full" | "partial" | "partial_alt" | "partial_alt2"' required>
+  The cut style:
+  - `"full"` — complete cut through the paper.
+  - `"partial"` — partial cut, leaving a small uncut strip. The standard default.
+  - `"partial_alt"` — alternate partial cut command (for printers that respond to a different ESC/POS variant).
+  - `"partial_alt2"` — alternate full cut command variant.
+</ParamField>
+
+<ParamField body="feed" type="number" required>
+  Number of lines to advance before cutting. Adds a small margin between the last printed line and the cut point.
+</ParamField>
+
+<CodeGroup>
+```json Partial cut, no extra feed
+{
+  "Cut": {
+    "mode": "partial",
+    "feed": 0
+  }
+}
+```
+
+```json Full cut with 3-line feed
+{
+  "Cut": {
+    "mode": "full",
+    "feed": 3
+  }
+}
+```
+
+```typescript Builder
+import { cut, CUT_MODE } from "tauri-plugin-thermal-printer";
+
+// Default: mode="partial", feedLines=4
+cut()
+
+// Explicit options
+cut(CUT_MODE.FULL, 3)
+cut("partial", 0)
+```
+</CodeGroup>
+
+<Note>
+  A **tail cut** (`{ "Cut": { "mode": "partial", "feed": 0 } }`) is **automatically appended** to every print job by default. You do not need to add an explicit `Cut` section for the standard end-of-job cut. Add your own `Cut` section only when you need:
+  - A cut in the **middle** of a document (e.g., to separate two receipts in one job).
+  - A **full cut** instead of the default partial.
+  - A different `feed` value before the cut.
+</Note>
+
+---
+
+## Beep
+
+The `Beep` section emits an acoustic signal through the printer's built-in buzzer. Use it to alert staff when a receipt is ready, confirm a kitchen order arrival, or signal a completed transaction.
+
+<ParamField body="times" type="number" required>
+  Number of beeps to emit (1–9).
+</ParamField>
+
+<ParamField body="duration" type="number" required>
+  Duration of each beep in milliseconds (1–255).
+</ParamField>
+
+<CodeGroup>
+```json Single short beep
+{
+  "Beep": {
+    "times": 1,
+    "duration": 100
+  }
+}
+```
+
+```json Three longer beeps
+{
+  "Beep": {
+    "times": 3,
+    "duration": 200
+  }
+}
+```
+
+```typescript Builder
+import { beep } from "tauri-plugin-thermal-printer";
+
+// Default: times=1, duration=3
+beep()
+
+// Custom
+beep(3, 200)
+```
+</CodeGroup>
+
+<Note>
+  Not all thermal printers include a buzzer. If the printer has no buzzer hardware, the `Beep` section is silently ignored — it will not cause an error.
+</Note>
+
+---
+
+## Drawer
+
+The `Drawer` section sends a pulse to a cash drawer connected to the printer's RJ-11 drawer port. The printer acts as a relay — it provides a brief electrical pulse on the specified pin that triggers the drawer's solenoid latch.
+
+<ParamField body="pin" type="2 | 5" required>
+  Drawer kick pin number. Most cash drawers use pin `2`; some models use pin `5`. Check your drawer's documentation if in doubt.
+</ParamField>
+
+<ParamField body="pulse_time" type="number" required>
+  Pulse duration in milliseconds. Typical range: 50–500 ms. The drawer's solenoid needs enough time to disengage the latch — 100–200 ms works for most drawers.
+</ParamField>
+
+<CodeGroup>
+```json Pin 2, 120 ms pulse
+{
+  "Drawer": {
+    "pin": 2,
+    "pulse_time": 120
+  }
+}
+```
+
+```json Pin 5, 200 ms pulse
+{
+  "Drawer": {
+    "pin": 5,
+    "pulse_time": 200
+  }
+}
+```
+
+```typescript Builder
+import { drawer } from "tauri-plugin-thermal-printer";
+
+// Default: pin=2, pulse_time=120
+drawer()
+
+// Custom
+drawer(5, 200)
+```
+</CodeGroup>
+
+<Note>
+  The cash drawer must be connected to the printer's drawer port, not to the computer directly. The `Drawer` section tells the **printer** to send the pulse — the printer must be powered on and connected for the drawer to open.
+</Note>
+
+---
+
+## Complete example
+
+The snippet below demonstrates a realistic end-of-sale workflow: print a receipt, advance paper, open the drawer, beep once to alert the cashier, and cut the receipt.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title, subtitle, text, line, table,
+  feed, cut, beep, drawer,
+  TEXT_ALIGN, TEXT_SIZE, CUT_MODE, ENCODE,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+  sections: [
+    // ── Receipt content ──────────────────────────────────────
+    title("DEMO STORE"),
+    subtitle("Receipt #00571"),
+    line("="),
+    table(
+      2,
+      [
+        [text("1× Coffee"),  text("$3.00", { align: TEXT_ALIGN.RIGHT })],
+        [text("1× Muffin"),  text("$2.50", { align: TEXT_ALIGN.RIGHT })],
+      ],
+      { column_widths: [34, 14] }  // 34+14 = 48 for Mm80
+    ),
+    line("-"),
+    text("Total: $5.50", { bold: true, size: TEXT_SIZE.DOUBLE, align: TEXT_ALIGN.RIGHT }),
+    line("="),
+    text("Thank you!", { align: TEXT_ALIGN.CENTER }),
+
+    // ── Feed: push content past cutter blade ─────────────────
+    feed(3),
+
+    // ── Cut: explicit full cut (overrides the default partial) ─
+    cut(CUT_MODE.FULL, 0),
+
+    // ── Drawer: open cash drawer on pin 2 ────────────────────
+    drawer(2, 120),
+
+    // ── Beep: single short beep to alert cashier ─────────────
+    beep(1, 100),
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+<Accordion title="Why is there no tail cut in this example?">
+  The plugin appends a tail `{ "Cut": { "mode": "partial", "feed": 0 } }` automatically at the end of every job. Because an explicit `Cut` section is already present in `sections` (with `mode: "full"`), both cuts will fire: the explicit full cut in the middle of the job first, followed by the automatic partial cut at the very end. If you want **only** the explicit cut, you can still rely on the automatic one if it is partial — or simply be aware that both will execute.
+</Accordion>

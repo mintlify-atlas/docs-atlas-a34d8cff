@@ -1,0 +1,463 @@
+---
+title: "TypeScript API Constants — Thermal Printer"
+sidebarTitle: "Constants"
+description: "All exported constant objects, lookup maps, defaults, and utility functions from tauri-plugin-thermal-printer for type-safe printer configuration."
+---
+
+Rather than scattering raw string literals through your code, `tauri-plugin-thermal-printer` exports typed constant objects for every enumerated value in the API. Import only what you need — tree-shaking keeps your bundle lean. Each constant value is typed with the matching string-literal type, giving you autocomplete and compile-time safety without any runtime overhead.
+
+---
+
+## `TEXT_ALIGN`
+
+Maps semantic names to the `TextAlign` string values accepted by style objects and section interfaces.
+
+```typescript
+export const TEXT_ALIGN = {
+  LEFT:   'left'   as TextAlign,
+  CENTER: 'center' as TextAlign,
+  RIGHT:  'right'  as TextAlign,
+} as const
+```
+
+### Usage
+
+```typescript
+import { TEXT_ALIGN, text } from 'tauri-plugin-thermal-printer'
+
+const sections = [
+  text('Left-aligned',   { align: TEXT_ALIGN.LEFT }),
+  text('Centered',       { align: TEXT_ALIGN.CENTER }),
+  text('Right-aligned',  { align: TEXT_ALIGN.RIGHT }),
+]
+```
+
+---
+
+## `TEXT_SIZE`
+
+Maps semantic names to `TextSize` values that control character magnification.
+
+```typescript
+export const TEXT_SIZE = {
+  NORMAL: 'normal' as TextSize,
+  HEIGHT: 'height' as TextSize,
+  WIDTH:  'width'  as TextSize,
+  DOUBLE: 'double' as TextSize,
+} as const
+```
+
+| Key | Value | Description |
+|---|---|---|
+| `NORMAL` | `'normal'` | Standard 1× size |
+| `HEIGHT` | `'height'` | 2× height only |
+| `WIDTH` | `'width'` | 2× width only |
+| `DOUBLE` | `'double'` | 2× width and 2× height |
+
+### Usage
+
+```typescript
+import { TEXT_SIZE, text } from 'tauri-plugin-thermal-printer'
+
+const total = text('Total: $9.50', {
+  bold: true,
+  size: TEXT_SIZE.DOUBLE,
+  align: 'right',
+})
+```
+
+---
+
+## `TEXT_FONT`
+
+Maps semantic names to `TextFont` values selecting the hardware font.
+
+```typescript
+export const TEXT_FONT = {
+  A: 'A' as TextFont,
+  B: 'B' as TextFont,
+  C: 'C' as TextFont,
+} as const
+```
+
+<Note>
+  Font availability and appearance vary by printer model. Font A is the widest and most legible; Font C is narrowest. Always test on your target hardware.
+</Note>
+
+### Usage
+
+```typescript
+import { TEXT_FONT, text } from 'tauri-plugin-thermal-printer'
+
+const fine = text('Fine print', { font: TEXT_FONT.B })
+```
+
+---
+
+## `BARCODE_TYPE`
+
+Maps semantic names to `BarcodeType` string values.
+
+```typescript
+export const BARCODE_TYPE = {
+  UPC_A:   'UPC-A'   as BarcodeType,
+  UPC_E:   'UPC-E'   as BarcodeType,
+  EAN13:   'EAN13'   as BarcodeType,
+  EAN8:    'EAN8'    as BarcodeType,
+  CODE39:  'CODE39'  as BarcodeType,
+  ITF:     'ITF'     as BarcodeType,
+  CODABAR: 'CODABAR' as BarcodeType,
+  CODE93:  'CODE93'  as BarcodeType,
+  CODE128: 'CODE128' as BarcodeType,
+} as const
+```
+
+<Warning>
+  `UPC_A`, `UPC_E`, `EAN13`, `EAN8`, and `ITF` only accept digit characters in the `data` field. The backend throws a descriptive error if non-digit characters are supplied.
+</Warning>
+
+### Usage
+
+```typescript
+import { BARCODE_TYPE, barcode } from 'tauri-plugin-thermal-printer'
+
+const ean  = barcode('5901234123457',   BARCODE_TYPE.EAN13)
+const code = barcode('HELLO-WORLD-123', BARCODE_TYPE.CODE39)
+const gs1  = barcode('1234567890',      BARCODE_TYPE.CODE128)
+```
+
+---
+
+## `BARCODE_TEXT_POSITION`
+
+Controls whether the human-readable text interpretation (HRI) is printed alongside the barcode.
+
+```typescript
+export const BARCODE_TEXT_POSITION = {
+  NONE:  'none'  as BarcodeTextPosition,
+  ABOVE: 'above' as BarcodeTextPosition,
+  BELOW: 'below' as BarcodeTextPosition,
+  BOTH:  'both'  as BarcodeTextPosition,
+} as const
+```
+
+### Usage
+
+```typescript
+import { BARCODE_TEXT_POSITION, barcode, BARCODE_TYPE } from 'tauri-plugin-thermal-printer'
+
+const b = barcode('123456', BARCODE_TYPE.CODE128, {
+  text_position: BARCODE_TEXT_POSITION.BELOW,
+})
+```
+
+---
+
+## `QR_ERROR_CORRECTION`
+
+Maps semantic names to `QrErrorCorrection` levels. Higher levels increase physical redundancy at the cost of a denser (larger) code.
+
+```typescript
+export const QR_ERROR_CORRECTION = {
+  /** Low — 7% recovery capacity, up to 7089 numeric chars */
+  L: 'L' as QrErrorCorrection,
+  /** Medium — 15% recovery capacity, up to 4296 numeric chars (recommended default) */
+  M: 'M' as QrErrorCorrection,
+  /** Quartile — 25% recovery capacity, up to 2953 numeric chars */
+  Q: 'Q' as QrErrorCorrection,
+  /** High — 30% recovery capacity, up to 1817 numeric chars */
+  H: 'H' as QrErrorCorrection,
+} as const
+```
+
+| Key | Value | Recovery | Max Numeric Chars |
+|---|---|---|---|
+| `L` | `'L'` | 7% | 7089 |
+| `M` | `'M'` | 15% | 4296 |
+| `Q` | `'Q'` | 25% | 2953 |
+| `H` | `'H'` | 30% | 1817 |
+
+### Usage
+
+```typescript
+import { QR_ERROR_CORRECTION, qr } from 'tauri-plugin-thermal-printer'
+
+// Ticket QR — moderate redundancy, good default
+const ticketQr = qr('https://example.com/order/A-1001', {
+  size: 6,
+  error_correction: QR_ERROR_CORRECTION.M,
+  model: 2,
+})
+
+// Event ticket — high redundancy for printed paper that may get crumpled
+const eventQr = qr('TICKET-A1234567-EVENT2025', {
+  size: 6,
+  error_correction: QR_ERROR_CORRECTION.H,
+  model: 2,
+})
+```
+
+---
+
+## `IMAGE_MODE`
+
+Controls the print scale of raster images and NV logos.
+
+```typescript
+export const IMAGE_MODE = {
+  NORMAL:        'normal'        as ImageMode,
+  DOUBLE_WIDTH:  'double_width'  as ImageMode,
+  DOUBLE_HEIGHT: 'double_height' as ImageMode,
+  QUADRUPLE:     'quadruple'     as ImageMode,
+} as const
+```
+
+| Key | Value | Description |
+|---|---|---|
+| `NORMAL` | `'normal'` | 1× scale |
+| `DOUBLE_WIDTH` | `'double_width'` | 2× width only |
+| `DOUBLE_HEIGHT` | `'double_height'` | 2× height only |
+| `QUADRUPLE` | `'quadruple'` | 2× width and 2× height |
+
+### Usage
+
+```typescript
+import { IMAGE_MODE, image, logo } from 'tauri-plugin-thermal-printer'
+
+const img = image('<BASE64>', { size: IMAGE_MODE.NORMAL })
+const lg  = logo(1, IMAGE_MODE.DOUBLE_WIDTH)
+```
+
+---
+
+## `CUT_MODE`
+
+Controls how the paper is cut.
+
+```typescript
+export const CUT_MODE = {
+  FULL:    'full'    as CutMode,
+  PARTIAL: 'partial' as CutMode,
+} as const
+```
+
+<Note>
+  `CutMode` also includes `'partial_alt'` and `'partial_alt2'` as string literals for printers that require alternate cut commands, but these are not exposed as named keys in `CUT_MODE`. Pass them as raw strings when needed.
+</Note>
+
+### Usage
+
+```typescript
+import { CUT_MODE, cut } from 'tauri-plugin-thermal-printer'
+
+const fullCut    = cut(CUT_MODE.FULL,    5)
+const partialCut = cut(CUT_MODE.PARTIAL, 4) // default when using cut()
+```
+
+---
+
+## `ENCODE`
+
+The complete set of host-side encoding identifiers. All entries except `ACCENT_REMOVER` map directly to [`encoding_rs` statics](https://docs.rs/encoding_rs/latest/encoding_rs/#statics).
+
+```typescript
+export const ENCODE = {
+  // Special built-in transliterator
+  ACCENT_REMOVER: 'ACCENT_REMOVER',
+
+  // encoding_rs statics
+  BIG5:           'BIG5',
+  EUC_JP:         'EUC_JP',
+  EUC_KR:         'EUC_KR',
+  GBK:            'GBK',
+  GB18030:        'GB18030',
+  IBM866:         'IBM866',
+  ISO_2022_JP:    'ISO_2022_JP',
+  ISO_8859_2:     'ISO_8859_2',
+  ISO_8859_3:     'ISO_8859_3',
+  ISO_8859_4:     'ISO_8859_4',
+  ISO_8859_5:     'ISO_8859_5',
+  ISO_8859_6:     'ISO_8859_6',
+  ISO_8859_7:     'ISO_8859_7',
+  ISO_8859_8:     'ISO_8859_8',
+  ISO_8859_8_I:   'ISO_8859_8_I',
+  ISO_8859_10:    'ISO_8859_10',
+  ISO_8859_13:    'ISO_8859_13',
+  ISO_8859_14:    'ISO_8859_14',
+  ISO_8859_15:    'ISO_8859_15',
+  ISO_8859_16:    'ISO_8859_16',
+  KOI8_R:         'KOI8_R',
+  KOI8_U:         'KOI8_U',
+  MACINTOSH:      'MACINTOSH',
+  REPLACEMENT:    'REPLACEMENT',
+  SHIFT_JIS:      'SHIFT_JIS',
+  UTF_8:          'UTF_8',
+  UTF_16BE:       'UTF_16BE',
+  UTF_16LE:       'UTF_16LE',
+  WINDOWS_874:    'WINDOWS_874',
+  WINDOWS_1250:   'WINDOWS_1250',
+  WINDOWS_1251:   'WINDOWS_1251',
+  WINDOWS_1252:   'WINDOWS_1252',
+  WINDOWS_1253:   'WINDOWS_1253',
+  WINDOWS_1254:   'WINDOWS_1254',
+  WINDOWS_1255:   'WINDOWS_1255',
+  WINDOWS_1256:   'WINDOWS_1256',
+  WINDOWS_1257:   'WINDOWS_1257',
+  WINDOWS_1258:   'WINDOWS_1258',
+  X_MAC_CYRILLIC: 'X_MAC_CYRILLIC',
+  X_USER_DEFINED: 'X_USER_DEFINED',
+} as const
+```
+
+### Key values
+
+| Key | Value | Common Use |
+|---|---|---|
+| `ACCENT_REMOVER` | `'ACCENT_REMOVER'` | Default. Transliterates accented chars to ASCII (`á→a`, `ß→ss`, `€→EUR`). |
+| `WINDOWS_1252` | `'WINDOWS_1252'` | Western European (most common for ESC/POS page 6). |
+| `GBK` | `'GBK'` | Simplified Chinese. |
+| `GB18030` | `'GB18030'` | Simplified Chinese (superset of GBK). |
+| `SHIFT_JIS` | `'SHIFT_JIS'` | Japanese. |
+| `EUC_KR` | `'EUC_KR'` | Korean. |
+| `ISO_8859_2` | `'ISO_8859_2'` | Central European (Polish, Czech, etc.). |
+| `UTF_8` | `'UTF_8'` | Unicode passthrough — printer must support UTF-8. |
+
+### Usage
+
+```typescript
+import { ENCODE, type CodePage } from 'tauri-plugin-thermal-printer'
+
+// Western European receipt
+const westernOptions: CodePage = {
+  code_page: 6,
+  encode: ENCODE.WINDOWS_1252,
+  use_gbk: false,
+}
+
+// Chinese receipt with GBK fallback
+const chineseOptions: CodePage = {
+  code_page: 0,
+  encode: ENCODE.GBK,
+  use_gbk: true,
+}
+
+// Universal ASCII-safe fallback
+const safeOptions: CodePage = {
+  code_page: 0,
+  encode: ENCODE.ACCENT_REMOVER,
+  use_gbk: false,
+}
+```
+
+---
+
+## `PAPER_SIZE_CHARS_PER_LINE`
+
+A lookup map from `PaperSize` to the number of fixed-width characters that fit on one line.
+
+```typescript
+export const PAPER_SIZE_CHARS_PER_LINE: Record<PaperSize, number> = {
+  Mm40:  21,
+  Mm44:  24,
+  Mm58:  32,
+  Mm72:  42,
+  Mm80:  48,
+  Mm104: 62,
+}
+```
+
+### Usage
+
+```typescript
+import { PAPER_SIZE_CHARS_PER_LINE } from 'tauri-plugin-thermal-printer'
+
+const lineWidth = PAPER_SIZE_CHARS_PER_LINE['Mm80'] // 48
+```
+
+---
+
+## `PAPER_SIZE_PIXELS_WIDTH`
+
+A lookup map from `PaperSize` to the printable pixel width.
+
+```typescript
+export const PAPER_SIZE_PIXELS_WIDTH: Record<PaperSize, number> = {
+  Mm40:  256,
+  Mm44:  288,
+  Mm58:  384,
+  Mm72:  512,
+  Mm80:  576,
+  Mm104: 752,
+}
+```
+
+### Usage
+
+```typescript
+import { PAPER_SIZE_PIXELS_WIDTH } from 'tauri-plugin-thermal-printer'
+
+const maxImageWidth = PAPER_SIZE_PIXELS_WIDTH['Mm58'] // 384
+```
+
+---
+
+## `DEFAULT_PAPER_SIZE`
+
+The default paper size used when `paper_size` is not specified in `PrintJobRequest`.
+
+```typescript
+export const DEFAULT_PAPER_SIZE: PaperSize = 'Mm80'
+```
+
+### Usage
+
+```typescript
+import { DEFAULT_PAPER_SIZE } from 'tauri-plugin-thermal-printer'
+
+console.log(DEFAULT_PAPER_SIZE) // 'Mm80'
+```
+
+---
+
+## `getPaperSizeCharsPerLine`
+
+```typescript
+function getPaperSizeCharsPerLine(paperSize: PaperSize): number
+```
+
+Helper that returns the number of characters per line for the given paper size. Equivalent to `PAPER_SIZE_CHARS_PER_LINE[paperSize]`.
+
+### Usage
+
+```typescript
+import { getPaperSizeCharsPerLine } from 'tauri-plugin-thermal-printer'
+
+const cols = getPaperSizeCharsPerLine('Mm80') // 48
+```
+
+---
+
+## `getPaperSizePixelsWidth`
+
+```typescript
+function getPaperSizePixelsWidth(paperSize: PaperSize): number
+```
+
+Helper that returns the printable pixel width for the given paper size. Equivalent to `PAPER_SIZE_PIXELS_WIDTH[paperSize]`.
+
+### Usage
+
+```typescript
+import {
+  getPaperSizePixelsWidth,
+  getPaperSizeCharsPerLine,
+  DEFAULT_PAPER_SIZE,
+  type PaperSize,
+} from 'tauri-plugin-thermal-printer'
+
+const size: PaperSize = 'Mm58'
+
+console.log(DEFAULT_PAPER_SIZE)              // 'Mm80'
+console.log(getPaperSizeCharsPerLine(size))  // 32
+console.log(getPaperSizePixelsWidth(size))   // 384
+```

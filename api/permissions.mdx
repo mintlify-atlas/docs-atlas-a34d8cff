@@ -1,0 +1,120 @@
+---
+title: "Permissions & Capabilities for Thermal Printer"
+sidebarTitle: "Permissions"
+description: "Configure Tauri v2 capability permissions for the thermal-printer plugin, including allow/deny rules for all commands and Android Bluetooth access."
+---
+
+Tauri v2 uses a **capability and permission system** to control which IPC commands your frontend JavaScript can call into the Rust backend. Every plugin command is blocked by default — you must explicitly grant access in a capabilities file before your app can list printers, send print jobs, or run test prints. This model follows the principle of least privilege: your app only exposes the exact surface area it needs, reducing the attack vector for malicious web content running inside the WebView.
+
+## Adding Permissions to Your Capabilities File
+
+Capabilities are declared in JSON files inside `src-tauri/capabilities/`. The default file is `src-tauri/capabilities/default.json`. Add the `thermal-printer` permission identifiers you need to the `permissions` array:
+
+```json
+{
+  "permissions": [
+    "core:default",
+    "thermal-printer:allow-list-thermal-printers",
+    "thermal-printer:allow-print-thermal-printer",
+    "thermal-printer:allow-test-thermal-printer"
+  ]
+}
+```
+
+<Tip>
+  You can also use the shorthand `"thermal-printer:default"` to enable all four
+  permissions at once — `allow-ping`, `allow-print-thermal-printer`,
+  `allow-list-thermal-printers`, and `allow-test-thermal-printer` — as defined
+  in the plugin's default permission set.
+</Tip>
+
+## Default Permission Set
+
+The plugin ships a pre-composed default set that grants access to every command exposed by the plugin. It is defined in `permissions/default.toml`:
+
+```toml
+[default]
+description = "Default permissions for the plugin"
+permissions = [
+  "allow-ping",
+  "allow-print-thermal-printer",
+  "allow-list-thermal-printers",
+  "allow-test-thermal-printer",
+]
+```
+
+Reference it in your capability file as `"thermal-printer:default"` to enable everything at once.
+
+## Permission Reference
+
+The table below lists every permission identifier provided by the plugin. Each command has a matching `allow-*` entry (grants access) and a `deny-*` entry (blocks access).
+
+<Warning>
+  **Deny permissions take precedence over allow permissions.** If the same
+  command is covered by both an `allow-*` and a `deny-*` rule — whether through
+  direct listing or through a composed permission set — the denial always wins
+  and the command will be blocked.
+</Warning>
+
+| Identifier | Description |
+|---|---|
+| `thermal-printer:allow-list-thermal-printers` | Enables the `list_thermal_printers` command — returns all printers visible to the host OS. |
+| `thermal-printer:deny-list-thermal-printers` | Denies the `list_thermal_printers` command. |
+| `thermal-printer:allow-print-thermal-printer` | Enables the `print_thermal_printer` command — sends a `PrintJobRequest` to a printer. |
+| `thermal-printer:deny-print-thermal-printer` | Denies the `print_thermal_printer` command. |
+| `thermal-printer:allow-test-thermal-printer` | Enables the `test_thermal_printer` command — sends a diagnostic test print. |
+| `thermal-printer:deny-test-thermal-printer` | Denies the `test_thermal_printer` command. |
+| `thermal-printer:allow-ping` | Enables the internal `ping` command used by the plugin's health check. |
+| `thermal-printer:deny-ping` | Denies the `ping` command. |
+
+## Android Bluetooth Permissions
+
+<Note>
+  On Android the plugin communicates with thermal printers over Bluetooth SPP
+  (Serial Port Profile). The following Android permissions are declared directly
+  in the Kotlin plugin manifest and are **requested automatically at runtime**
+  — you do not need to add anything to your Tauri capability files for them:
+
+  - `BLUETOOTH`
+  - `BLUETOOTH_ADMIN`
+  - `BLUETOOTH_SCAN`
+  - `BLUETOOTH_CONNECT`
+  - `ACCESS_FINE_LOCATION`
+
+  The user will see a system dialog asking to grant Bluetooth access the first
+  time your app attempts to list or connect to a printer. Make sure the target
+  device has already paired the printer in the Android Bluetooth settings, and
+  pass the printer's MAC address (e.g. `"AA:BB:CC:DD:EE:FF"`) as the `printer`
+  field in your `PrintJobRequest`.
+</Note>
+
+## Principle of Least Privilege
+
+<Tip>
+  Only add the permissions your app actually uses. For example, if your app
+  only prints and never needs to list printers programmatically, omit
+  `thermal-printer:allow-list-thermal-printers` from your capabilities file.
+  This minimises the commands available to any script running inside the
+  WebView.
+</Tip>
+
+A minimal capabilities file that only allows printing looks like this:
+
+```json
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "thermal-printer:allow-print-thermal-printer"
+  ]
+}
+```
+
+The capabilities file lives at:
+
+```
+src-tauri/capabilities/default.json
+```

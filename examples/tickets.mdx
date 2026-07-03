@@ -1,0 +1,303 @@
+---
+title: "Printing Tickets with Tauri Thermal Printer"
+sidebarTitle: "Tickets"
+description: "Ready-to-use ticket examples: event admission tickets with QR and barcode, queue management turn tickets, and parking entry tickets."
+---
+
+Tickets share many structural features with receipts — header, details, machine-readable code — but they are usually shorter, denser, and often include security-oriented QR error-correction settings so the code remains scannable even if the paper is slightly crumpled. The examples below cover three common ticket categories: **event admission**, **queue management**, and **parking**.
+
+<Note>
+  All examples target 80 mm (`Mm80`) paper (48 chars/line). If you switch to 58
+  mm (`Mm58`, 32 chars/line) you must recalculate every `column_widths` array so
+  the widths still sum to **32**.
+</Note>
+
+---
+
+## Event Ticket (80 mm)
+
+An event admission ticket with a seat-assignment table, owner information, important instructions, a QR code at level **H** (30 % recovery — ideal for ticketing where the code may be photographed or printed at lower quality), and a CODE128 barcode for gate scanners.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  subtitle,
+  text,
+  line,
+  feed,
+  qr,
+  barcode,
+  table,
+  ENCODE,
+  TEXT_ALIGN,
+  BARCODE_TYPE,
+  BARCODE_TEXT_POSITION,
+  QR_ERROR_CORRECTION,
+} from "tauri-plugin-thermal-printer";
+
+const eventTicket: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    // ── Event header ─────────────────────────────────────────────
+    title("CONCIERTO 2025"),
+    subtitle("BANDA ROCK NACIONAL"),
+    line("="),
+
+    // ── Ticket metadata ──────────────────────────────────────────
+    text("Boleto: #A-1234567"),
+    text("Fecha: 25/10/2025"),
+    text("Hora: 20:00 hrs"),
+    text("Lugar: Auditorio Nacional"),
+    line("-"),
+
+    // ── Seat assignment (columns sum = 24 + 24 = 48) ─────────────
+    table(
+      2,
+      [
+        [ text("Zona:"),    text("Preferente A") ],
+        [ text("Fila:"),    text("12")           ],
+        [ text("Asiento:"), text("45")           ],
+      ],
+      { column_widths: [24, 24], truncate: false },
+    ),
+    line("="),
+
+    text("PRECIO: $850.00", { bold: true, align: TEXT_ALIGN.CENTER }),
+    line("="),
+
+    // ── Ticket holder ─────────────────────────────────────────────
+    text("Titular: Juan Perez"),
+    text("ID: 1234567890"),
+    line("-"),
+
+    // ── Instructions ─────────────────────────────────────────────
+    text("IMPORTANTE:",                      { bold: true }),
+    text("- Presentar identificacion"),
+    text("- Llegar 30 min antes"),
+    text("- No se permiten reembolsos"),
+
+    // ── QR (level H for maximum damage tolerance) ─────────────────
+    // error_correction: "H" recovers up to 30% of the code area,
+    // making it robust against creases, smudges, or screenshot crops.
+    { Qr: {
+        data: "TICKET-A1234567-CONCIERTO2025",
+        size: 6,
+        error_correction: QR_ERROR_CORRECTION.H,
+        model: 2,
+        align: TEXT_ALIGN.CENTER,
+    }},
+
+    // ── CODE128 barcode for legacy gate scanners ──────────────────
+    barcode("A1234567", BARCODE_TYPE.CODE128, {
+      width: 2,
+      height: 60,
+      text_position: BARCODE_TEXT_POSITION.BELOW,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    feed(3),
+  ],
+};
+
+try {
+  await print_thermal_printer(eventTicket);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+<Tip>
+  **QR error-correction levels for tickets**
+
+  | Level | Recovery | Best for |
+  |-------|----------|----------|
+  | `L`   | 7 %      | Clean, short-lived tickets (queue stubs) |
+  | `M`   | 15 %     | General receipts (default) |
+  | `Q`   | 25 %     | Transport passes, boarding passes |
+  | `H`   | 30 %     | Admission tickets, loyalty cards — choose this when the code may be photographed or physically handled |
+</Tip>
+
+---
+
+## Queue / Turn Ticket (58 mm)
+
+A queue-management ticket for a service counter. It displays the turn number prominently in double size, the service name, estimated wait, and a QR code. A single `Beep` signals the operator that the ticket has been dispensed.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  text,
+  line,
+  feed,
+  beep,
+  ENCODE,
+  TEXT_ALIGN,
+  TEXT_SIZE,
+  QR_ERROR_CORRECTION,
+} from "tauri-plugin-thermal-printer";
+
+const queueTicket: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm58", // compact paper — 32 chars/line
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    // ── Header ────────────────────────────────────────────────────
+    title("TICKET DE TURNO"),
+    line("="),
+
+    // ── Turn number in large print ────────────────────────────────
+    text("A-123", { bold: true, align: TEXT_ALIGN.CENTER, size: TEXT_SIZE.DOUBLE }),
+    line("="),
+
+    // ── Service details ───────────────────────────────────────────
+    text("Servicio: Cajas"),
+    text("Fecha: 14/10/2025"),
+    text("Hora: 15:45"),
+    line("-"),
+
+    // ── Wait estimate ─────────────────────────────────────────────
+    text("En espera: 8 turnos"),
+    text("Tiempo aprox: 20 min"),
+    line("-"),
+
+    // ── QR for mobile queue status lookup ─────────────────────────
+    // Level L is enough for a short alphanumeric turn code.
+    { Qr: {
+        data: "A-123",
+        size: 4,
+        error_correction: QR_ERROR_CORRECTION.L,
+        model: 2,
+        align: TEXT_ALIGN.CENTER,
+    }},
+    text("Escanea para consultar", { align: TEXT_ALIGN.CENTER }),
+    feed(2),
+
+    // ── Audible signal to operator ────────────────────────────────
+    beep(1, 100),
+  ],
+};
+
+try {
+  await print_thermal_printer(queueTicket);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+---
+
+## Parking Ticket (80 mm)
+
+A vehicle entry ticket with entry timestamp, vehicle plate, level/zone, a tariff table, and a CODE128 barcode that the exit gate scanner reads to compute the fee.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  subtitle,
+  text,
+  line,
+  feed,
+  barcode,
+  ENCODE,
+  TEXT_ALIGN,
+  BARCODE_TYPE,
+  BARCODE_TEXT_POSITION,
+} from "tauri-plugin-thermal-printer";
+
+const parkingTicket: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    // ── Header ────────────────────────────────────────────────────
+    title("ESTACIONAMIENTO"),
+    subtitle("PLAZA COMERCIAL"),
+    line("="),
+
+    // ── Entry details ─────────────────────────────────────────────
+    text("Ticket: E-5678"),
+    text("Entrada: 14/10/2025  10:15"),
+    text("Caseta: A-01"),
+    line("-"),
+
+    // ── Vehicle info ──────────────────────────────────────────────
+    text("Vehiculo: ABC-1234"),
+    text("Nivel: 2 - Zona B"),
+    line("="),
+
+    // ── Tariff schedule ───────────────────────────────────────────
+    text("TARIFAS:", { bold: true }),
+    text("Primera hora: $20.00"),
+    text("Hora adicional: $15.00"),
+    text("Maximo 24hrs: $180.00"),
+    line("-"),
+
+    // ── Instructions ─────────────────────────────────────────────
+    text("CONSERVE SU TICKET", { bold: true, align: TEXT_ALIGN.CENTER }),
+    text("Para salida y pago",  { align: TEXT_ALIGN.CENTER }),
+
+    // ── Gate barcode ─────────────────────────────────────────────
+    // CODE128 encodes alphanumeric ticket IDs efficiently and is
+    // supported by virtually every fixed-position barcode scanner.
+    barcode("E5678", BARCODE_TYPE.CODE128, {
+      width: 2,
+      height: 60,
+      text_position: BARCODE_TEXT_POSITION.BELOW,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    feed(3),
+  ],
+};
+
+try {
+  await print_thermal_printer(parkingTicket);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+<Tip>
+  **Why CODE128 for ticket numbers?**  
+  CODE128 encodes the full ASCII character set (letters, digits, and symbols) at
+  high density, making it the safest barcode choice for alphanumeric ticket IDs
+  like `E-5678` or `A-1234567`. Reserve EAN13/UPC-A for strictly numeric product
+  codes (13 digits, check digit included).
+</Tip>
+
+---
+
+## Choosing a Paper Size for Tickets
+
+<CardGroup cols={3}>
+  <Card title="Mm40 / Mm44" icon="ticket">
+    21–24 chars/line. Handheld queue dispensers and compact kiosk printers.
+    Keep tables to 2 columns maximum.
+  </Card>
+  <Card title="Mm58" icon="ticket">
+    32 chars/line. Most common for portable and Bluetooth printers. Good for
+    turn tickets and short parking stubs.
+  </Card>
+  <Card title="Mm80" icon="ticket">
+    48 chars/line. Standard desktop POS printers. Enough room for 3-column
+    tables, large QR codes, and barcodes side by side.
+  </Card>
+</CardGroup>

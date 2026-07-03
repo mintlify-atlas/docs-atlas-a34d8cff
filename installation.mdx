@@ -1,0 +1,138 @@
+---
+title: "Installing Tauri Plugin Thermal Printer in Your App"
+sidebarTitle: "Installation"
+description: "Step-by-step guide to adding the Rust crate and npm package, registering the plugin, and granting the required Tauri v2 capabilities."
+---
+
+Getting the thermal printer plugin into your Tauri v2 project takes four steps: add the Rust crate, add the npm package, register the plugin in your app's entry point, and grant the required capabilities. The sections below walk through each step, plus an alternative local-path installation for contributors or monorepo setups.
+
+<Steps>
+  <Step title="Add the Rust crate">
+    Run the following command from your `src-tauri` directory to add the crate to your `Cargo.toml`:
+
+    ```bash
+    cargo add tauri-plugin-thermal-printer
+    ```
+
+    This pins the latest `2.0.1` release. If you want to pin the version explicitly, your `Cargo.toml` entry will look like this:
+
+    ```toml
+    [dependencies]
+    tauri-plugin-thermal-printer = "2.0.1"
+    ```
+  </Step>
+
+  <Step title="Add the npm package">
+    Install the TypeScript/JavaScript bindings from your project root using whichever package manager you prefer:
+
+    <CodeGroup>
+      ```bash bun
+      bun add tauri-plugin-thermal-printer
+      ```
+
+      ```bash npm
+      npm install tauri-plugin-thermal-printer
+      ```
+
+      ```bash pnpm
+      pnpm add tauri-plugin-thermal-printer
+      ```
+
+      ```bash yarn
+      yarn add tauri-plugin-thermal-printer
+      ```
+    </CodeGroup>
+
+    The npm package ships fully typed TypeScript definitions (`dist-js/index.d.ts`) as well as ESM and CJS builds. It also exports all builder helpers, style constants, and type interfaces — no separate `@types` package is needed.
+  </Step>
+
+  <Step title="Register the plugin in lib.rs">
+    Open `src-tauri/src/lib.rs` and add `.plugin(tauri_plugin_thermal_printer::init())` to your `tauri::Builder` chain before `.run(...)`:
+
+    ```rust
+    #[cfg_attr(mobile, tauri::mobile_entry_point)]
+    pub fn run() {
+        tauri::Builder::default()
+            .invoke_handler(tauri::generate_handler![greet])
+            .plugin(tauri_plugin_thermal_printer::init())
+            .run(tauri::generate_context!())
+            .expect("error while running tauri application");
+    }
+    ```
+
+    `tauri_plugin_thermal_printer::init()` registers the three IPC commands (`print_thermal_printer`, `list_thermal_printers`, `test_thermal_printer`) and sets up both the desktop and Android backends automatically.
+  </Step>
+
+  <Step title="Grant capabilities">
+    Tauri v2 requires you to explicitly allow each IPC command your frontend can call. Open (or create) `src-tauri/capabilities/default.json` and add the three thermal-printer permissions:
+
+    ```json
+    {
+      "$schema": "../gen/schemas/desktop-schema.json",
+      "identifier": "default",
+      "description": "enables the default permissions",
+      "windows": ["main"],
+      "permissions": [
+        "core:default",
+        "thermal-printer:allow-list-thermal-printers",
+        "thermal-printer:allow-print-thermal-printer",
+        "thermal-printer:allow-test-thermal-printer"
+      ]
+    }
+    ```
+
+    Alternatively you can use the bundled `thermal-printer:default` shorthand, which grants all three `allow-*` permissions at once:
+
+    ```json
+    {
+      "permissions": [
+        "core:default",
+        "thermal-printer:default"
+      ]
+    }
+    ```
+
+    | Permission identifier | Command enabled |
+    |-----------------------|----------------|
+    | `thermal-printer:allow-list-thermal-printers` | `list_thermal_printers()` |
+    | `thermal-printer:allow-print-thermal-printer` | `print_thermal_printer()` |
+    | `thermal-printer:allow-test-thermal-printer` | `test_thermal_printer()` |
+  </Step>
+</Steps>
+
+## Alternative: Local Path Installation
+
+If you want to use a local clone — for example, to contribute to the plugin or to patch it in a monorepo — build the plugin from source first and then point both Cargo and your package manager at the local path.
+
+**1. Clone and build**
+
+```bash
+git clone https://github.com/luis3132/tauri-plugin-thermal-printer
+cd tauri-plugin-thermal-printer
+cargo build --release && bun i && bun run build
+```
+
+**2. Point Cargo at the local path**
+
+In `src-tauri/Cargo.toml`:
+
+```toml
+[dependencies]
+tauri-plugin-thermal-printer = { path = "../../tauri-plugin-thermal-printer" }
+```
+
+**3. Point your package manager at the local path**
+
+In your frontend `package.json`:
+
+```json
+{
+  "dependencies": {
+    "tauri-plugin-thermal-printer": "file:../tauri-plugin-thermal-printer"
+  }
+}
+```
+
+<Note>
+**Android note:** The plugin requests Bluetooth runtime permissions automatically on Android (BLUETOOTH_CONNECT, BLUETOOTH_SCAN). You do not need to add permission declarations to your `AndroidManifest.xml` or handle the permission dialog yourself — the Kotlin plugin layer takes care of it.
+</Note>

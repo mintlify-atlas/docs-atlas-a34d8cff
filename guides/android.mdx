@@ -1,0 +1,191 @@
+---
+title: "Using the Plugin on Android Devices"
+sidebarTitle: "Android"
+description: "Everything you need to know about Bluetooth printer discovery, MAC address targeting, runtime permissions, and Android-specific limitations."
+---
+
+Android support in the Tauri Plugin Thermal Printer works through a Kotlin plugin that bridges Rust-generated ESC/POS binary data to a physical printer over Bluetooth SPP (Serial Port Profile). Because Android's printing model is fundamentally different from desktop CUPS/WinAPI, there are a number of Android-specific requirements and constraints to be aware of before you start.
+
+<Warning>
+  iOS is **not supported**. The plugin registers an iOS binding stub but all method calls return an `UnsupportedPlatform` error. Do not attempt to use this plugin on iOS.
+</Warning>
+
+## Requirements and Limitations
+
+<CardGroup cols={2}>
+  <Card title="Bluetooth Only for Printing" icon="bluetooth">
+    Actual printing on Android is done exclusively over **Bluetooth SPP (RFCOMM)**. USB is available for discovery only — you cannot print to a USB-connected printer from Android.
+  </Card>
+  <Card title="No Network Printing" icon="wifi-slash">
+    Network printer scanning is present in the source code but intentionally disabled. Network printing is not supported on Android.
+  </Card>
+  <Card title="Pairing Required" icon="link">
+    The target printer **must be previously paired** in the Android system Bluetooth settings before the plugin can connect. The plugin connects to bonded (paired) devices only.
+  </Card>
+  <Card title="MAC Address as Identifier" icon="tag">
+    Unlike desktop platforms where you use a printer name, on Android the `printer` field in `PrintJobRequest` must be the **Bluetooth MAC address** of the printer (e.g. `"AA:BB:CC:DD:EE:FF"`).
+  </Card>
+</CardGroup>
+
+## Bluetooth Permissions
+
+All required Bluetooth permissions are **requested automatically at runtime** when you call `list_thermal_printers()` or `print_thermal_printer()` for the first time. You do not need to add any manual permission-request logic.
+
+The following Android permissions are bundled with the plugin:
+
+| Permission | Purpose |
+|---|---|
+| `BLUETOOTH` | Classic Bluetooth operations (legacy API) |
+| `BLUETOOTH_ADMIN` | Starting/stopping Bluetooth discovery |
+| `BLUETOOTH_SCAN` | Scanning for nearby Bluetooth devices (Android 12+) |
+| `BLUETOOTH_CONNECT` | Connecting to paired devices (Android 12+) |
+| `ACCESS_FINE_LOCATION` | Required by Android to use Bluetooth scanning |
+| `ACCESS_COARSE_LOCATION` | Required by Android to use Bluetooth scanning |
+
+<Note>
+  If the user denies the Bluetooth permission, the plugin rejects the call with the error `"Bluetooth permission denied"`. Show a user-friendly message explaining why the permission is needed.
+</Note>
+
+## Discovering Printers on Android
+
+Call `list_thermal_printers()` to retrieve all discoverable printers. On Android this scans two sources simultaneously:
+
+- **Bluetooth** — iterates over all **paired (bonded)** devices and filters for those that look like printers (by Bluetooth device class, or names containing "printer", "print", "POS", or "thermal").
+- **USB** — iterates over connected USB devices and checks for the USB printer interface class (`bDeviceClass = 7`). USB printers appear in the list with `interface_type: "USB"` but **cannot be printed to**.
+
+```typescript
+import {
+  list_thermal_printers,
+  type PrinterInfo,
+} from "tauri-plugin-thermal-printer";
+
+try {
+  const printers: PrinterInfo[] = await list_thermal_printers();
+  console.log(printers);
+  // Example output:
+  // [
+  //   {
+  //     "name": "EPSON TM-m30",
+  //     "interface_type": "Bluetooth",
+  //     "identifier": "AA:BB:CC:DD:EE:FF",
+  //     "status": "Paired"
+  //   },
+  //   {
+  //     "name": "USB Printer",
+  //     "interface_type": "USB",
+  //     "identifier": "VID:1208/PID:514",
+  //     "status": "Connected"
+  //   }
+  // ]
+} catch (error) {
+  console.error("Could not list printers:", error);
+}
+```
+
+The `identifier` field for Bluetooth printers contains the **MAC address** you need to use as the `printer` field when printing.
+
+## Printing on Android
+
+Pass the printer's Bluetooth MAC address as the `printer` field in your `PrintJobRequest`. The Kotlin layer uses this identifier to look up the paired device and open an RFCOMM socket.
+
+```typescript
+import {
+  print_thermal_printer,
+  ENCODE,
+  type PrintJobRequest,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  // MAC address of the paired Bluetooth printer
+  printer: "AA:BB:CC:DD:EE:FF",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+  },
+  sections: [
+    { Title: { text: "Order #1042" } },
+    { Text: { text: "Thank you for your purchase!" } },
+    { Line: { character: "-" } },
+    {
+      Table: {
+        columns: 2,
+        body: [
+          [{ text: "Americano" }, { text: "$2.50" }],
+          [{ text: "Croissant" }, { text: "$3.50" }],
+        ],
+      },
+    },
+    { Line: { character: "=" } },
+    { Text: { text: "Total: $6.00", styles: { bold: true } } },
+    { Feed: { feed_type: "lines", value: 3 } },
+    { Cut: { mode: "partial", feed: 0 } },
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+  console.log("Print job sent successfully");
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+## Connection Types on Android
+
+| Connection | Discovery | Printing |
+|---|---|---|
+| **Bluetooth (SPP/RFCOMM)** | ✅ Paired devices only | ✅ Full print support |
+| **USB** | ✅ Lists connected printers | ❌ Not supported |
+| **Network** | ❌ Disabled | ❌ Not supported |
+
+<Info>
+  Bluetooth discovery only returns **already-paired** devices. The plugin does not initiate a fresh Bluetooth scan for unpaired devices — it reads from the system's bonded device list.
+</Info>
+
+## Pairing Your Printer
+
+Before the plugin can connect, you must pair the printer once through Android's system settings:
+
+<Steps>
+  <Step title="Enable Bluetooth on the printer">
+    Power on the printer and ensure its Bluetooth radio is active. Consult your printer's manual for the specific steps — many thermal printers enter pairing mode by holding a button during power-on.
+  </Step>
+  <Step title="Open Android Bluetooth settings">
+    On the Android device, go to **Settings → Connected devices → Pair new device** (exact wording varies by manufacturer).
+  </Step>
+  <Step title="Select the printer">
+    The printer should appear in the list of available devices. Tap it to pair. Most thermal printers do not require a PIN; if prompted, try `0000` or `1234`.
+  </Step>
+  <Step title="Confirm pairing">
+    Once paired, the printer appears in the **Paired devices** list. It will now be returned by `list_thermal_printers()` and can be used as the `printer` field.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: Bluetooth permission denied">
+    The user rejected the Bluetooth permission prompt. Guide users to **Settings → Apps → [Your App] → Permissions → Nearby devices** and enable it. On Android versions below 12, the location permission controls Bluetooth access — ensure `ACCESS_FINE_LOCATION` is granted.
+  </Accordion>
+
+  <Accordion title="Error: Bluetooth is disabled">
+    The device's Bluetooth radio is off. Prompt the user to enable Bluetooth in the system quick settings panel before retrying.
+  </Accordion>
+
+  <Accordion title="Error: Bluetooth adapter not available">
+    The device does not have a Bluetooth adapter, or the Android system could not obtain a `BluetoothManager` reference. This is rare on modern Android devices but can occur on certain emulators.
+  </Accordion>
+
+  <Accordion title="Printer not returned by list_thermal_printers()">
+    The printer must be **paired** before it can be discovered. If the printer does not appear, complete the pairing step in Android Bluetooth settings first. Also confirm that the printer's name or Bluetooth device class matches the plugin's detection heuristics (name contains "printer", "print", "POS", or "thermal", or device class is `IMAGING`/`0x0680`).
+  </Accordion>
+
+  <Accordion title="Print job succeeds but nothing prints">
+    Verify that the Bluetooth MAC address in the `printer` field is correct — use the `identifier` value from `list_thermal_printers()`. Confirm the printer is powered on, not sleeping, and is within Bluetooth range. Also check that `paper_size` matches the physical paper width loaded in the printer.
+  </Accordion>
+
+  <Accordion title="Connection drops or times out mid-print">
+    Bluetooth RFCOMM connections can time out if the printer takes too long to process a large job. Reduce image resolution, use fewer sections, or increase Bluetooth transmit power in the printer's settings if available.
+  </Accordion>
+</AccordionGroup>

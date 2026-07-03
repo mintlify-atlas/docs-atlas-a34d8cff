@@ -1,0 +1,219 @@
+---
+title: "Image & Logo Section Types for Thermal Printers"
+sidebarTitle: "Images & Logos"
+description: "Print base64 encoded images with Floyd-Steinberg dithering and recall pre-stored NV memory logos using the Image and Logo thermal printer sections."
+---
+
+Media sections let you embed visual content in a print job. The `Image` section renders any base64-encoded raster image, automatically converting it to the monochrome bitmap format required by thermal printers. The `Logo` section recalls a pre-programmed graphic stored directly in the printer's non-volatile (NV) memory, printing it instantly without transferring pixel data at runtime.
+
+## Image
+
+The `Image` section accepts a base64-encoded image, resizes it to fit the specified `max_width`, converts it to monochrome, and sends the resulting bitmap to the printer. Color and grayscale images are automatically reduced to black-and-white — optionally using Floyd-Steinberg dithering for significantly improved tone reproduction.
+
+<ParamField body="data" type="string" required>
+  Base64-encoded image data. Both plain base64 strings and data URIs (e.g. `data:image/png;base64,...`) are accepted. **Must not be empty.**
+</ParamField>
+
+<ParamField body="max_width" type="number" required>
+  Maximum rendering width in pixels. `0` uses the full paper width automatically. Values larger than the paper width are clamped to the paper width — no manual calculation required.
+</ParamField>
+
+<ParamField body="align" type='"left" | "center" | "right"' required>
+  Horizontal alignment of the image on the paper.
+</ParamField>
+
+<ParamField body="dithering" type="boolean" required>
+  Apply Floyd-Steinberg dithering before sending to the printer. **Recommended `true`** for photographs and gradients; may be set to `false` for sharp black-and-white graphics (logos, icons) that do not benefit from dithering.
+</ParamField>
+
+<ParamField body="size" type='"normal" | "double_width" | "double_height" | "quadruple"' required>
+  Output size multiplier applied after rendering. `"quadruple"` doubles both width and height.
+</ParamField>
+
+### Floyd-Steinberg dithering
+
+Thermal printers can only print black or white dots — there are no gray levels. Floyd-Steinberg dithering converts a color or grayscale image to pure monochrome by distributing the quantization error of each pixel to its neighbors, creating the visual illusion of continuous tones through patterns of black and white dots. This is especially beneficial for photographs and images with gradients; for binary logos or icons already in black and white, dithering has little effect and may be disabled.
+
+### Paper width reference
+
+| Paper size | Pixel width | Notes |
+|------------|-------------|-------|
+| `Mm40` | 256 px | Handheld ticket printers |
+| `Mm44` | 288 px | Compact POS |
+| `Mm58` | 384 px | Common portable format |
+| `Mm72` | 512 px | Mid-range |
+| `Mm80` | 576 px | Standard large format (default) |
+| `Mm104` | 752 px | Wide format |
+
+<CodeGroup>
+```json Full-width centered image
+{
+  "Image": {
+    "data": "<BASE64_IMAGE_STRING>",
+    "max_width": 0,
+    "align": "center",
+    "dithering": true,
+    "size": "normal"
+  }
+}
+```
+
+```json Fixed width, left-aligned, no dithering
+{
+  "Image": {
+    "data": "<BASE64_IMAGE_STRING>",
+    "max_width": 200,
+    "align": "left",
+    "dithering": false,
+    "size": "normal"
+  }
+}
+```
+
+```json Double-width display
+{
+  "Image": {
+    "data": "<BASE64_IMAGE_STRING>",
+    "max_width": 288,
+    "align": "center",
+    "dithering": true,
+    "size": "double_width"
+  }
+}
+```
+
+```typescript Builder — minimal (all defaults)
+import { image } from "tauri-plugin-thermal-printer";
+
+// max_width=0 (full paper), align="center", dithering=true, size="normal"
+image("<BASE64_IMAGE_STRING>")
+```
+
+```typescript Builder — all options
+import { image, IMAGE_MODE, TEXT_ALIGN } from "tauri-plugin-thermal-printer";
+
+image("<BASE64_IMAGE_STRING>", {
+  max_width: 384,          // 0 = full paper width
+  align: TEXT_ALIGN.CENTER,
+  dithering: true,
+  size: IMAGE_MODE.NORMAL,
+})
+```
+</CodeGroup>
+
+<Note>
+  `max_width: 0` automatically uses the full printable width of the selected paper size. You do not need to look up the pixel width manually — just pass `0` and the plugin resolves it from `paper_size`.
+</Note>
+
+<Tip>
+  **Preparing images for best results:**
+  - Resize the image to match the paper width (e.g. 576 px wide for `Mm80`) before encoding.
+  - Convert to PNG or JPEG before base64-encoding.
+  - Keep image height reasonable — very tall images take longer to transfer and print.
+  - For logos with clean edges, set `dithering: false` to avoid speckled borders.
+</Tip>
+
+<Warning>
+  `data` must not be empty. An empty string causes the backend to throw:
+  `"Image data cannot be empty"`.
+</Warning>
+
+---
+
+## Logo
+
+The `Logo` section instructs the printer to recall and print a graphic stored in its **NV (non-volatile) memory** by key code. NV logos are pre-programmed into the printer firmware using the printer's own configuration utility or setup software — they are not transmitted during the print job. This makes logo printing nearly instantaneous with no data transfer overhead.
+
+<ParamField body="key_code" type="number" required>
+  The NV memory key index (1–255) that identifies the pre-stored logo.
+</ParamField>
+
+<ParamField body="mode" type='"normal" | "double_width" | "double_height" | "quadruple"' required>
+  Output size multiplier for the recalled logo image.
+</ParamField>
+
+<CodeGroup>
+```json Normal size
+{
+  "Logo": {
+    "key_code": 1,
+    "mode": "normal"
+  }
+}
+```
+
+```json Double width
+{
+  "Logo": {
+    "key_code": 2,
+    "mode": "double_width"
+  }
+}
+```
+
+```typescript Builder
+import { logo, IMAGE_MODE } from "tauri-plugin-thermal-printer";
+
+// Default mode = "normal"
+logo(1)
+
+// Custom mode
+logo(2, IMAGE_MODE.DOUBLE_WIDTH)
+logo(3, IMAGE_MODE.QUADRUPLE)
+```
+</CodeGroup>
+
+<Note>
+  The logo must be **pre-programmed into the printer's NV memory** before use. How you store logos varies by printer model and manufacturer — consult your printer's manual or utilities (e.g. Epson TM-Utility for Epson printers). If no logo is stored at the given `key_code`, the printer typically prints nothing or a blank space.
+</Note>
+
+<Tip>
+  Use the `Logo` section for header graphics on high-volume receipt printers where re-sending the full bitmap on every job would slow throughput. Store the logo once and recall it by key code for zero-overhead branded headers.
+</Tip>
+
+---
+
+## Complete example
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  image, logo, title, text, line, feed, cut,
+  IMAGE_MODE, TEXT_ALIGN, ENCODE,
+} from "tauri-plugin-thermal-printer";
+
+// Helper: load and base64-encode an image file (Node / Tauri context)
+// const imageBase64 = readFileSync("logo.png").toString("base64");
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+  sections: [
+    // Option A: NV memory logo (fastest, no data transfer)
+    logo(1, IMAGE_MODE.NORMAL),
+
+    // Option B: Inline base64 image (flexible, any image)
+    image("<BASE64_IMAGE_STRING>", {
+      max_width: 0,             // full paper width (576 px for Mm80)
+      align: TEXT_ALIGN.CENTER,
+      dithering: true,          // recommended for photos/gradients
+      size: IMAGE_MODE.NORMAL,
+    }),
+
+    line("="),
+    title("ORDER CONFIRMATION"),
+    text("Thank you for your purchase!"),
+    feed(3),
+    cut(),
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+} catch (error) {
+  // error is a string, e.g.: "Image data cannot be empty"
+  console.error("Print failed:", error);
+}
+```

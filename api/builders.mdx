@@ -1,0 +1,659 @@
+---
+title: "TypeScript API Builders — Thermal Printer"
+sidebarTitle: "Builders"
+description: "Reference for all 16 builder helper functions that construct PrintSections objects without wrapper-key boilerplate, with parameter docs and examples."
+---
+
+Every element in a `PrintJobRequest.sections` array must be a `PrintSections` discriminated union object — `{ Title: { text: '...' } }`, `{ Cut: { mode: 'partial', feed: 4 } }`, and so on. The builder helpers exported by `tauri-plugin-thermal-printer` create these wrapper objects for you, with sensible defaults pre-applied, so you can write readable, concise section arrays without repeating the union key on every line.
+
+Each builder always returns a `PrintSections` value and can be used directly inside a `sections` array or composed into variables.
+
+---
+
+## `title`
+
+```typescript
+function title(text: string, styles?: GlobalStyles): PrintSections
+```
+
+Creates a `{ Title: { text, styles } }` section. The backend renders titles with forced double size and center alignment unless overridden in `styles`.
+
+<ParamField body="text" type="string" required>
+  Title text to print.
+</ParamField>
+<ParamField body="styles" type="GlobalStyles">
+  Optional style overrides applied on top of the title defaults.
+</ParamField>
+
+```typescript
+import { title } from 'tauri-plugin-thermal-printer'
+
+title('MY BUSINESS')
+title('MY BUSINESS', { align: 'left', bold: true })
+```
+
+---
+
+## `subtitle`
+
+```typescript
+function subtitle(text: string, styles?: GlobalStyles): PrintSections
+```
+
+Creates a `{ Subtitle: { text, styles } }` section. The backend renders subtitles with forced bold and height size unless overridden.
+
+<ParamField body="text" type="string" required>
+  Subtitle text to print.
+</ParamField>
+<ParamField body="styles" type="GlobalStyles">
+  Optional style overrides applied on top of the subtitle defaults.
+</ParamField>
+
+```typescript
+import { subtitle } from 'tauri-plugin-thermal-printer'
+
+subtitle('Receipt #001')
+subtitle('Receipt #001', { align: 'center' })
+```
+
+---
+
+## `text`
+
+```typescript
+function text(text: string, styles?: GlobalStyles): PrintSections
+```
+
+Creates a `{ Text: { text, styles } }` section for general body text. Inherits the current global styles when `styles` is omitted.
+
+<ParamField body="text" type="string" required>
+  Body text to print.
+</ParamField>
+<ParamField body="styles" type="GlobalStyles">
+  Optional per-section style overrides.
+</ParamField>
+
+```typescript
+import { text, TEXT_ALIGN, TEXT_SIZE } from 'tauri-plugin-thermal-printer'
+
+text('Normal line')
+text('Bold right-aligned total', { bold: true, align: TEXT_ALIGN.RIGHT })
+text('Grand total: $9.50',       { bold: true, size: TEXT_SIZE.DOUBLE })
+```
+
+---
+
+## `line`
+
+```typescript
+function line(character: string = '-'): PrintSections
+```
+
+Creates a `{ Line: { character } }` section that repeats `character` across the full paper width.
+
+<ParamField body="character" type="string" default="'-'">
+  Single character to repeat (e.g. `'-'`, `'='`, `'_'`, `'*'`).
+</ParamField>
+
+```typescript
+import { line } from 'tauri-plugin-thermal-printer'
+
+line()      // uses '-'
+line('=')
+line('*')
+```
+
+---
+
+## `feed`
+
+```typescript
+function feed(value: number, feed_type: FeedType = 'lines'): PrintSections
+```
+
+Creates a `{ Feed: { feed_type, value } }` section that advances the paper.
+
+<ParamField body="value" type="number" required>
+  Amount to advance. Unit depends on `feed_type`.
+</ParamField>
+<ParamField body="feed_type" type="FeedType" default="'lines'">
+  `'lines'` — advance N lines (`ESC d n`); `'dots'` — advance N dot rows (`ESC J n`); `'line_feed'` — send N raw LF characters.
+</ParamField>
+
+```typescript
+import { feed } from 'tauri-plugin-thermal-printer'
+
+feed(3)               // advance 3 lines
+feed(20, 'dots')      // advance 20 dot rows
+feed(2, 'line_feed')  // 2 raw LF characters
+```
+
+---
+
+## `cut`
+
+```typescript
+function cut(mode: CutMode = 'partial', feedLines: number = 4): PrintSections
+```
+
+Creates a `{ Cut: { mode, feed: feedLines } }` section.
+
+<ParamField body="mode" type="CutMode" default="'partial'">
+  `'full'` | `'partial'` | `'partial_alt'` | `'partial_alt2'`.
+</ParamField>
+<ParamField body="feedLines" type="number" default="4">
+  Lines to advance before cutting.
+</ParamField>
+
+```typescript
+import { cut, CUT_MODE } from 'tauri-plugin-thermal-printer'
+
+cut()                        // partial cut, 4 feed lines
+cut(CUT_MODE.FULL, 5)        // full cut, 5 feed lines
+cut('partial_alt', 0)        // alternate partial cut command, no feed
+```
+
+---
+
+## `globalStyles`
+
+```typescript
+function globalStyles(styles: GlobalStyles): PrintSections
+```
+
+Creates a `{ GlobalStyles: styles }` section. When the backend encounters this section it updates the running default styles applied to subsequent `Title`, `Subtitle`, `Text`, and `Table` sections.
+
+<ParamField body="styles" type="GlobalStyles" required>
+  Style values to set as the new global default.
+</ParamField>
+
+```typescript
+import { globalStyles, text, TEXT_ALIGN } from 'tauri-plugin-thermal-printer'
+
+const sections = [
+  globalStyles({ align: TEXT_ALIGN.LEFT, font: 'A' }),
+  text('This line is left-aligned font A'),
+  globalStyles({ align: TEXT_ALIGN.CENTER, bold: true }),
+  text('This line is centered and bold'),
+]
+```
+
+---
+
+## `beep`
+
+```typescript
+function beep(times: number = 1, duration: number = 3): PrintSections
+```
+
+Creates a `{ Beep: { times, duration } }` section that triggers the printer's built-in buzzer.
+
+<ParamField body="times" type="number" default="1">
+  Number of beeps (1–9).
+</ParamField>
+<ParamField body="duration" type="number" default="3">
+  Duration per beep in milliseconds (1–255).
+</ParamField>
+
+```typescript
+import { beep } from 'tauri-plugin-thermal-printer'
+
+beep()          // 1 beep, 3 ms
+beep(2, 100)    // 2 beeps, 100 ms each
+```
+
+---
+
+## `drawer`
+
+```typescript
+function drawer(pin: 2 | 5 = 2, pulse_time: number = 120): PrintSections
+```
+
+Creates a `{ Drawer: { pin, pulse_time } }` section that opens the cash drawer.
+
+<ParamField body="pin" type="2 | 5" default="2">
+  Drawer kick pin. Most cash drawers use pin 2.
+</ParamField>
+<ParamField body="pulse_time" type="number" default="120">
+  Kick pulse duration in milliseconds.
+</ParamField>
+
+```typescript
+import { drawer } from 'tauri-plugin-thermal-printer'
+
+drawer()          // pin 2, 120 ms
+drawer(5, 200)    // pin 5, 200 ms
+```
+
+---
+
+## `table`
+
+```typescript
+function table(
+  columns: number,
+  body: Text[][],
+  options?: {
+    column_widths?: number[]
+    header?: Text[]
+    truncate?: boolean
+  },
+): PrintSections
+```
+
+Creates a `{ Table: { ... } }` section. The `truncate` option defaults to `true` when using the builder (the raw interface requires it to be set explicitly).
+
+<ParamField body="columns" type="number" required>
+  Number of columns.
+</ParamField>
+<ParamField body="body" type="Text[][]" required>
+  Data rows. Each inner array must have exactly `columns` elements.
+</ParamField>
+<ParamField body="options" type="object">
+  <Expandable title="options fields">
+    <ParamField body="column_widths" type="number[]">
+      Per-column character widths. Length must equal `columns` and the sum must equal the paper's chars/line (e.g. 48 for `Mm80`). Evenly distributed when omitted.
+    </ParamField>
+    <ParamField body="header" type="Text[]">
+      Column header cells. Must have exactly `columns` elements when provided.
+    </ParamField>
+    <ParamField body="truncate" type="boolean" default="true">
+      Truncate cell text that exceeds its column width instead of wrapping.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import { table, text, TEXT_ALIGN } from 'tauri-plugin-thermal-printer'
+
+table(
+  3,
+  [
+    [text('1'), text('Americano'),  text('$2.50', { align: TEXT_ALIGN.RIGHT })],
+    [text('2'), text('Croissant'),  text('$7.00', { align: TEXT_ALIGN.RIGHT })],
+  ],
+  {
+    column_widths: [6, 28, 14],
+    header: [
+      text('QTY',   { bold: true }),
+      text('ITEM',  { bold: true }),
+      text('TOTAL', { bold: true, align: TEXT_ALIGN.RIGHT }),
+    ],
+    truncate: true,
+  },
+)
+```
+
+---
+
+## `qr`
+
+```typescript
+function qr(
+  data: string,
+  options?: {
+    size?: number
+    error_correction?: QrErrorCorrection
+    model?: 1 | 2
+    align?: TextAlign
+  },
+): PrintSections
+```
+
+Creates a `{ Qr: { ... } }` section.
+
+<ParamField body="data" type="string" required>
+  QR payload. Must not be empty. Maximum length depends on `error_correction`.
+</ParamField>
+<ParamField body="options" type="object">
+  <Expandable title="options fields">
+    <ParamField body="size" type="number" default="6">
+      Module size 1–16.
+    </ParamField>
+    <ParamField body="error_correction" type="QrErrorCorrection" default="'M'">
+      `'L'` (7%, 7089 chars) | `'M'` (15%, 4296 chars) | `'Q'` (25%, 2953 chars) | `'H'` (30%, 1817 chars).
+    </ParamField>
+    <ParamField body="model" type="1 | 2" default="2">
+      QR model version. Model 2 is recommended.
+    </ParamField>
+    <ParamField body="align" type="TextAlign">
+      Horizontal alignment. Defaults to current global alignment.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import { qr, QR_ERROR_CORRECTION, TEXT_ALIGN } from 'tauri-plugin-thermal-printer'
+
+qr('https://example.com')
+qr('https://example.com/order/123', {
+  size: 6,
+  error_correction: QR_ERROR_CORRECTION.M,
+  model: 2,
+  align: TEXT_ALIGN.CENTER,
+})
+```
+
+---
+
+## `barcode`
+
+```typescript
+function barcode(
+  data: string,
+  barcode_type: BarcodeType = 'CODE128',
+  options?: {
+    width?: number
+    height?: number
+    text_position?: BarcodeTextPosition
+    align?: TextAlign
+  },
+): PrintSections
+```
+
+Creates a `{ Barcode: { ... } }` section.
+
+<ParamField body="data" type="string" required>
+  Barcode payload. Must not be empty.
+</ParamField>
+<ParamField body="barcode_type" type="BarcodeType" default="'CODE128'">
+  One of: `'UPC-A'` | `'UPC-E'` | `'EAN13'` | `'EAN8'` | `'CODE39'` | `'ITF'` | `'CODABAR'` | `'CODE93'` | `'CODE128'`.
+</ParamField>
+<ParamField body="options" type="object">
+  <Expandable title="options fields">
+    <ParamField body="width" type="number" default="3">
+      Bar module width 2–6.
+    </ParamField>
+    <ParamField body="height" type="number" default="80">
+      Bar height in dots (must be greater than 0).
+    </ParamField>
+    <ParamField body="text_position" type="BarcodeTextPosition" default="'below'">
+      `'none'` | `'above'` | `'below'` | `'both'`.
+    </ParamField>
+    <ParamField body="align" type="TextAlign">
+      Horizontal alignment. Defaults to current global alignment.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import {
+  barcode,
+  BARCODE_TYPE,
+  BARCODE_TEXT_POSITION,
+  TEXT_ALIGN,
+} from 'tauri-plugin-thermal-printer'
+
+barcode('123456789012')   // CODE128, default options
+
+barcode('5901234123457', BARCODE_TYPE.EAN13, {
+  width: 3,
+  height: 70,
+  text_position: BARCODE_TEXT_POSITION.BELOW,
+  align: TEXT_ALIGN.CENTER,
+})
+```
+
+---
+
+## `dataMatrix`
+
+```typescript
+function dataMatrix(data: string, size: number = 6): PrintSections
+```
+
+Creates a `{ DataMatrix: { data, size } }` section.
+
+<ParamField body="data" type="string" required>
+  DataMatrix payload.
+</ParamField>
+<ParamField body="size" type="number" default="6">
+  Module size 1–16.
+</ParamField>
+
+```typescript
+import { dataMatrix } from 'tauri-plugin-thermal-printer'
+
+dataMatrix('A-1001')
+dataMatrix('A-1001', 8)
+```
+
+---
+
+## `pdf417`
+
+```typescript
+function pdf417(
+  data: string,
+  options?: {
+    columns?: number
+    rows?: number
+    width?: number
+    height?: number
+    error_correction?: number
+  },
+): PrintSections
+```
+
+Creates a `{ Pdf417: { ... } }` section.
+
+<ParamField body="data" type="string" required>
+  PDF417 payload.
+</ParamField>
+<ParamField body="options" type="object">
+  <Expandable title="options fields">
+    <ParamField body="columns" type="number" default="0">
+      Data columns. `0` = auto (1–30).
+    </ParamField>
+    <ParamField body="rows" type="number" default="0">
+      Data rows. `0` = auto (3–90).
+    </ParamField>
+    <ParamField body="width" type="number" default="2">
+      Module width 2–8.
+    </ParamField>
+    <ParamField body="height" type="number" default="3">
+      Row height 2–8.
+    </ParamField>
+    <ParamField body="error_correction" type="number" default="2">
+      Error correction level 0–8.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import { pdf417 } from 'tauri-plugin-thermal-printer'
+
+pdf417('A-1001|TOTAL=9.50|PAID')
+
+pdf417('A-1001|TOTAL=9.50|PAID', {
+  columns: 0,
+  rows: 0,
+  width: 2,
+  height: 3,
+  error_correction: 2,
+})
+```
+
+---
+
+## `image`
+
+```typescript
+function image(
+  data: string,
+  options?: {
+    max_width?: number
+    align?: TextAlign
+    dithering?: boolean
+    size?: ImageMode
+  },
+): PrintSections
+```
+
+Creates a `{ Image: { ... } }` section. Base64 strings with or without a `data:` URI prefix are both accepted.
+
+<ParamField body="data" type="string" required>
+  Base64-encoded image. Must not be empty.
+</ParamField>
+<ParamField body="options" type="object">
+  <Expandable title="options fields">
+    <ParamField body="max_width" type="number" default="0">
+      Maximum output width in pixels. `0` (or values larger than the paper width) are clamped to the full paper width automatically.
+    </ParamField>
+    <ParamField body="align" type="TextAlign" default="'center'">
+      Horizontal alignment.
+    </ParamField>
+    <ParamField body="dithering" type="boolean" default="true">
+      Apply Floyd-Steinberg dithering for better quality on monochrome printers.
+    </ParamField>
+    <ParamField body="size" type="ImageMode" default="'normal'">
+      Print scale — `'normal'` | `'double_width'` | `'double_height'` | `'quadruple'`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```typescript
+import { image, IMAGE_MODE, TEXT_ALIGN } from 'tauri-plugin-thermal-printer'
+
+image('<BASE64_STRING>')
+
+image('<BASE64_STRING>', {
+  max_width: 0,
+  align: TEXT_ALIGN.CENTER,
+  dithering: true,
+  size: IMAGE_MODE.NORMAL,
+})
+```
+
+---
+
+## `logo`
+
+```typescript
+function logo(key_code: number, mode: ImageMode = 'normal'): PrintSections
+```
+
+Creates a `{ Logo: { key_code, mode } }` section that prints a logo previously stored in the printer's NV memory.
+
+<ParamField body="key_code" type="number" required>
+  NV memory key code (1–255).
+</ParamField>
+<ParamField body="mode" type="ImageMode" default="'normal'">
+  Print scale — `'normal'` | `'double_width'` | `'double_height'` | `'quadruple'`.
+</ParamField>
+
+```typescript
+import { logo, IMAGE_MODE } from 'tauri-plugin-thermal-printer'
+
+logo(1)
+logo(1, IMAGE_MODE.DOUBLE_WIDTH)
+```
+
+---
+
+## Complete Example
+
+The example below uses every builder function in a single print job, mirroring the full builder example from the project README.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  subtitle,
+  text,
+  line,
+  feed,
+  cut,
+  globalStyles,
+  beep,
+  drawer,
+  table,
+  qr,
+  barcode,
+  dataMatrix,
+  pdf417,
+  image,
+  logo,
+  ENCODE,
+  TEXT_ALIGN,
+  TEXT_SIZE,
+  BARCODE_TYPE,
+  BARCODE_TEXT_POSITION,
+  QR_ERROR_CORRECTION,
+  IMAGE_MODE,
+} from 'tauri-plugin-thermal-printer'
+
+const job: PrintJobRequest = {
+  printer: 'TM-T20II',
+  paper_size: 'Mm80',
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    globalStyles({ align: TEXT_ALIGN.LEFT }),
+    title('DEMO STORE'),
+    subtitle('Receipt #A-1001'),
+    text('Date: 2026-03-30 14:22'),
+    line('='),
+    table(
+      3,
+      [
+        [text('1'), text('Americano'), text('$2.50', { align: TEXT_ALIGN.RIGHT })],
+        [text('2'), text('Croissant'), text('$7.00', { align: TEXT_ALIGN.RIGHT })],
+      ],
+      {
+        column_widths: [6, 28, 14],
+        header: [
+          text('QTY',   { bold: true }),
+          text('ITEM',  { bold: true }),
+          text('TOTAL', { bold: true, align: TEXT_ALIGN.RIGHT }),
+        ],
+        truncate: true,
+      },
+    ),
+    line('-'),
+    text('Grand total: $9.50', {
+      bold: true,
+      size: TEXT_SIZE.DOUBLE,
+      align: TEXT_ALIGN.RIGHT,
+    }),
+    qr('https://example.com/r/A-1001', {
+      size: 6,
+      error_correction: QR_ERROR_CORRECTION.M,
+      model: 2,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    barcode('123456789012', BARCODE_TYPE.EAN13, {
+      width: 3,
+      height: 70,
+      text_position: BARCODE_TEXT_POSITION.BELOW,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    dataMatrix('A-1001', 6),
+    pdf417('A-1001|TOTAL=9.50|PAID', {
+      columns: 0,
+      rows: 0,
+      width: 2,
+      height: 3,
+      error_correction: 2,
+    }),
+    image('<BASE64_IMAGE>', {
+      max_width: 0,
+      align: TEXT_ALIGN.CENTER,
+      dithering: true,
+      size: IMAGE_MODE.NORMAL,
+    }),
+    logo(1, IMAGE_MODE.NORMAL),
+    drawer(2, 120),
+    beep(1, 3),
+    feed(3),
+    cut(),
+  ],
+}
+
+await print_thermal_printer(job)
+```

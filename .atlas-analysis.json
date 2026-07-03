@@ -1,0 +1,109 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Tauri Plugin Thermal Printer",
+  "projectDescription": "A Tauri v2 plugin that translates a TypeScript/JavaScript API into ESC/POS binary commands for thermal printers, supporting Linux, macOS, Windows, and Android (Bluetooth).",
+  "theme": "luma",
+  "primaryColor": "#07baf0",
+  "lightColor": "#5fc9de",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/architecture",
+              "guides/android",
+              "guides/encoding",
+              "guides/error-handling"
+            ]
+          },
+          {
+            "group": "Section Types",
+            "pages": [
+              "sections/text-sections",
+              "sections/code-sections",
+              "sections/media-sections",
+              "sections/control-sections"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/receipt",
+              "examples/tickets",
+              "examples/advanced"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "TypeScript API",
+            "pages": [
+              "api/functions",
+              "api/types",
+              "api/constants",
+              "api/builders"
+            ]
+          },
+          {
+            "group": "Permissions",
+            "pages": [
+              "api/permissions"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "ESC/POS command generation from a structured TypeScript/JavaScript API",
+    "Cross-platform support: Linux, macOS, Windows (CUPS/WinAPI) and Android (Bluetooth SPP)",
+    "16 printable section types: text, tables, QR codes, barcodes, images, and more",
+    "Flexible character encoding via encoding_rs with accent-removal fallback",
+    "Builder helper functions for zero-boilerplate section construction",
+    "Tauri v2 permission system integration",
+    "Floyd-Steinberg dithering for monochrome image printing",
+    "Multiple paper sizes from 40mm to 104mm with automatic char/pixel helpers"
+  ],
+  "publicApiSurface": [
+    "print_thermal_printer(printJobRequest: PrintJobRequest): Promise<void>",
+    "list_thermal_printers(): Promise<PrinterInfo[]>",
+    "test_thermal_printer(testPrintRequest: TestPrintRequest): Promise<void>",
+    "title(text, styles?): PrintSections",
+    "subtitle(text, styles?): PrintSections",
+    "text(text, styles?): PrintSections",
+    "line(character?): PrintSections",
+    "feed(value, feed_type?): PrintSections",
+    "cut(mode?, feedLines?): PrintSections",
+    "globalStyles(styles): PrintSections",
+    "beep(times?, duration?): PrintSections",
+    "drawer(pin?, pulse_time?): PrintSections",
+    "table(columns, body, options?): PrintSections",
+    "qr(data, options?): PrintSections",
+    "barcode(data, barcode_type?, options?): PrintSections",
+    "dataMatrix(data, size?): PrintSections",
+    "pdf417(data, options?): PrintSections",
+    "image(data, options?): PrintSections",
+    "logo(key_code, mode?): PrintSections",
+    "ENCODE (constant object — all encoding_rs statics + ACCENT_REMOVER)",
+    "TEXT_ALIGN, TEXT_SIZE, TEXT_FONT, BARCODE_TYPE, BARCODE_TEXT_POSITION, QR_ERROR_CORRECTION, IMAGE_MODE, CUT_MODE",
+    "PAPER_SIZE_CHARS_PER_LINE, PAPER_SIZE_PIXELS_WIDTH, DEFAULT_PAPER_SIZE",
+    "getPaperSizeCharsPerLine(paperSize): number",
+    "getPaperSizePixelsWidth(paperSize): number",
+    "PrintJobRequest, PrinterInfo, TestPrintRequest, CodePage, GlobalStyles, PaperSize, PrintSections (TypeScript interfaces/types)"
+  ]
+}

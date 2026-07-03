@@ -1,0 +1,241 @@
+---
+title: "Character Encoding and Code Page Configuration"
+sidebarTitle: "Encoding"
+description: "How to configure ESC/POS code pages, choose host-side encodings, handle accented characters, and print Asian text reliably across all printer models."
+---
+
+Thermal printers are fundamentally byte-stream devices — they receive raw binary data and map each byte to a glyph using a fixed **code page** stored in their firmware. The plugin's `CodePage` configuration controls two separate but related concerns: which code page the printer's firmware should activate (the `ESC t n` command), and how the Rust backend should encode your Unicode text strings into the bytes that are sent to the printer.
+
+## The CodePage Interface
+
+```typescript
+import { ENCODE, type CodePage } from "tauri-plugin-thermal-printer";
+
+const options: CodePage = {
+  code_page: 6,          // required — raw ESC t n value for your printer
+  encode: ENCODE.WINDOWS_1252, // optional — defaults to ENCODE.ACCENT_REMOVER
+  use_gbk: false,        // optional — defaults to false
+};
+```
+
+<Note>
+  `code_page` is the only **required** field. `encode` and `use_gbk` are both optional and have sensible defaults.
+</Note>
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `code_page` | `number` | ✅ Yes | — | Raw `ESC t n` value sent to the printer (`\x1B\x74\x{n}`). Look this up in your printer's programming manual. |
+| `encode` | `Encode` | ❌ No | `ENCODE.ACCENT_REMOVER` | Host-side encoding strategy applied before bytes are transmitted. |
+| `use_gbk` | `boolean` | ❌ No | `false` | When `true`, characters that `encode` cannot represent are retried with GBK before falling back to raw UTF-8 bytes. |
+
+## How Encoding Works
+
+The encoding pipeline has three stages, applied per character:
+
+<Steps>
+  <Step title="Primary encoding attempt">
+    If `encode` is set to a real encoding (e.g. `ENCODE.WINDOWS_1252`), the character is encoded using that encoding via the `encoding_rs` library. If encoding succeeds the bytes are emitted directly.
+  </Step>
+  <Step title="GBK retry (if use_gbk is true)">
+    If the primary encoding fails to represent the character and `use_gbk` is `true`, the character is re-tried using `encoding_rs::GBK`. This is useful for mixed-script text where most content is ASCII but occasional Chinese characters appear.
+  </Step>
+  <Step title="UTF-8 passthrough">
+    If all encoding attempts fail (or `use_gbk` is `false`), the original UTF-8 bytes for the character are emitted unchanged. Whether the printer renders them correctly depends on its firmware.
+  </Step>
+</Steps>
+
+## ENCODE.ACCENT_REMOVER
+
+`ENCODE.ACCENT_REMOVER` is the default encoding and the safest choice for printers that lack reliable code-page support for Latin characters with diacritics.
+
+Instead of encoding to a specific byte value, it **transliterates** accented and special characters to their nearest ASCII equivalents before any GBK retry or UTF-8 passthrough:
+
+| Input | Output |
+|---|---|
+| `á`, `à`, `â`, `ä` | `a` |
+| `é`, `è`, `ê`, `ë` | `e` |
+| `ñ` | `n` |
+| `ü` | `u` |
+| `ß` | `ss` |
+| `€` | `EUR` |
+| `©` | `(c)` |
+
+<Info>
+  `ACCENT_REMOVER` is not a real character encoding — it is a pre-processing step. After transliteration, any remaining non-ASCII characters that cannot be represented go through the GBK retry (if `use_gbk` is `true`) and then the UTF-8 passthrough.
+</Info>
+
+## Available ENCODE Values
+
+All other `ENCODE.*` constants correspond directly to [encoding_rs statics](https://docs.rs/encoding_rs/latest/encoding_rs/#statics) and are available under the same uppercase names:
+
+<CodeGroup>
+```typescript Western European
+// Windows-1252 — covers most Western European languages
+// (French, German, Spanish, Portuguese, Italian, Dutch…)
+import { ENCODE } from "tauri-plugin-thermal-printer";
+
+const options = {
+  code_page: 6,
+  encode: ENCODE.WINDOWS_1252,
+};
+```
+
+```typescript East Asian
+// GBK — covers Simplified Chinese
+import { ENCODE } from "tauri-plugin-thermal-printer";
+
+const options = {
+  code_page: 0,
+  encode: ENCODE.GBK,
+  use_gbk: true,
+};
+
+// Shift JIS — covers Japanese
+const optionsJP = {
+  code_page: 1,
+  encode: ENCODE.SHIFT_JIS,
+};
+```
+
+```typescript Cyrillic
+// Windows-1251 — covers Russian and other Cyrillic scripts
+import { ENCODE } from "tauri-plugin-thermal-printer";
+
+const options = {
+  code_page: 17,
+  encode: ENCODE.WINDOWS_1251,
+};
+```
+</CodeGroup>
+
+The full set of available encode values exported by the plugin:
+
+<Accordion title="All ENCODE values">
+| Constant | Script / Region |
+|---|---|
+| `ENCODE.ACCENT_REMOVER` | Transliterates to ASCII (plugin-specific) |
+| `ENCODE.WINDOWS_1252` | Western European (Latin-1 superset) |
+| `ENCODE.WINDOWS_1250` | Central European |
+| `ENCODE.WINDOWS_1251` | Cyrillic |
+| `ENCODE.WINDOWS_1253` | Greek |
+| `ENCODE.WINDOWS_1254` | Turkish |
+| `ENCODE.WINDOWS_1255` | Hebrew |
+| `ENCODE.WINDOWS_1256` | Arabic |
+| `ENCODE.WINDOWS_1257` | Baltic |
+| `ENCODE.WINDOWS_1258` | Vietnamese |
+| `ENCODE.WINDOWS_874` | Thai |
+| `ENCODE.GBK` | Simplified Chinese |
+| `ENCODE.GB18030` | Simplified Chinese (superset of GBK) |
+| `ENCODE.BIG5` | Traditional Chinese |
+| `ENCODE.SHIFT_JIS` | Japanese |
+| `ENCODE.EUC_JP` | Japanese (Unix) |
+| `ENCODE.EUC_KR` | Korean |
+| `ENCODE.ISO_2022_JP` | Japanese (7-bit) |
+| `ENCODE.ISO_8859_2` | Central European |
+| `ENCODE.ISO_8859_5` | Cyrillic |
+| `ENCODE.ISO_8859_7` | Greek |
+| `ENCODE.ISO_8859_8` | Hebrew |
+| `ENCODE.ISO_8859_15` | Western European (with €) |
+| `ENCODE.KOI8_R` | Russian |
+| `ENCODE.KOI8_U` | Ukrainian |
+| `ENCODE.UTF_8` | Unicode (UTF-8) |
+| `ENCODE.IBM866` | Cyrillic (DOS) |
+| `ENCODE.MACINTOSH` | Mac Roman |
+</Accordion>
+
+## Choosing the Right code_page
+
+The `code_page` value is the raw argument to the `ESC t n` command sent to your printer. **There is no universal standard** — each manufacturer assigns their own page numbers. You must look this up in your printer's programming manual.
+
+Common values for popular printer families:
+
+| code_page value | Epson/Star (common) | Description |
+|---|---|---|
+| `0` | USA / PC437 | Basic ASCII + box drawing |
+| `1` | Katakana | Japanese half-width katakana |
+| `2` | PC850 | Multilingual Latin |
+| `6` | PC1252 | Windows-1252 Western European |
+| `17` | PC866 | Russian Cyrillic |
+| `19` | PC858 | Western European (with €) |
+
+<Warning>
+  If you select the wrong `code_page`, printed text may show garbled characters even if your `encode` setting is correct — the printer will map each byte to the wrong glyph. Always test with your specific printer model.
+</Warning>
+
+## The use_gbk Flag
+
+When `use_gbk: true` is set, any character that the primary `encode` cannot represent is re-tried using GBK before the plugin falls back to raw UTF-8 bytes. This is useful for:
+
+- Receipts that are primarily in a Latin encoding but occasionally include Chinese product names
+- Printers that have native GBK support (common in Chinese POS hardware)
+
+```typescript
+import { ENCODE } from "tauri-plugin-thermal-printer";
+
+// Mixed Latin + Chinese content
+const options = {
+  code_page: 0,
+  encode: ENCODE.WINDOWS_1252,
+  use_gbk: true, // Chinese characters not in Win-1252 will be retried with GBK
+};
+```
+
+## Practical Examples
+
+<CodeGroup>
+```typescript Safe Default (any printer)
+import { ENCODE, type CodePage } from "tauri-plugin-thermal-printer";
+
+// Works on virtually all thermal printers.
+// Accented characters are transliterated to ASCII.
+const options: CodePage = {
+  code_page: 0,
+  encode: ENCODE.ACCENT_REMOVER,
+};
+```
+
+```typescript Western European Text
+import { ENCODE, type CodePage } from "tauri-plugin-thermal-printer";
+
+// Preserves é, ñ, ü, etc. as their correct encoded bytes.
+// code_page: 6 selects Windows-1252 on most Epson printers.
+const options: CodePage = {
+  code_page: 6,
+  encode: ENCODE.WINDOWS_1252,
+};
+```
+
+```typescript Asian Text (Chinese)
+import { ENCODE, type CodePage } from "tauri-plugin-thermal-printer";
+
+// GBK encoding for Simplified Chinese.
+// use_gbk: true retries with GBK for any character the primary encode misses.
+const options: CodePage = {
+  code_page: 0,
+  encode: ENCODE.GBK,
+  use_gbk: true,
+};
+```
+
+```typescript Japanese Text
+import { ENCODE, type CodePage } from "tauri-plugin-thermal-printer";
+
+// Shift JIS for Japanese printers.
+const options: CodePage = {
+  code_page: 1,
+  encode: ENCODE.SHIFT_JIS,
+};
+```
+</CodeGroup>
+
+## Encoding in the Print Pipeline
+
+The `CodePage` you set in `options` is passed to a `TextEncoder` instance at the start of every print job. This encoder is used for all text-bearing sections: `Title`, `Subtitle`, `Text`, and `Table`. The `code_page` value determines which `ESC t n` command is prepended to the document bytes, while `encode` and `use_gbk` control character-by-character text conversion.
+
+```rust
+// Simplified excerpt from src/process/process_print.rs
+document.extend(PrinterControl::initialize()); // ESC @ — reset printer
+document.extend(print_job.options.escpos_command()); // ESC t n — select code page
+```
+
+The `TextEncoder` is then shared across all text sections processed in the same job, ensuring consistent encoding throughout the entire document.

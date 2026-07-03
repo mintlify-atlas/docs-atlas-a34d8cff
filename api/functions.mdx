@@ -1,0 +1,274 @@
+---
+title: "TypeScript API Functions — Thermal Printer"
+sidebarTitle: "Functions"
+description: "Reference for the three async IPC functions exported by tauri-plugin-thermal-printer: print, list, and test thermal printers."
+---
+
+The TypeScript package exposes three async functions that communicate with the Rust backend via Tauri's IPC layer. Each function invokes a named command on the `plugin:thermal-printer` channel and returns a `Promise` that resolves on success or throws a descriptive `string` on failure. All three functions must be called from the Tauri frontend context.
+
+---
+
+## `print_thermal_printer`
+
+```typescript
+async function print_thermal_printer(printJobRequest: PrintJobRequest): Promise<void>
+```
+
+Sends a fully-described print job to the specified thermal printer. The Rust backend converts the `sections` array into raw ESC/POS bytes and dispatches them to the printer via the operating-system print subsystem (CUPS on Linux/macOS, WinAPI on Windows, Bluetooth SPP on Android).
+
+**IPC command:** `plugin:thermal-printer|print_thermal_printer`
+
+### Parameters
+
+<ParamField body="printJobRequest" type="PrintJobRequest" required>
+  The complete print job definition. See [`PrintJobRequest`](/api/types#printjobrequest) for the full field reference.
+
+  <Expandable title="PrintJobRequest fields">
+    <ParamField body="printer" type="string" required>
+      Name of the target printer as reported by the OS (e.g. `"TM-T20II"`). On Android, pass the Bluetooth MAC address (e.g. `"AA:BB:CC:DD:EE:FF"`).
+    </ParamField>
+    <ParamField body="sections" type="PrintSections[]" required>
+      Ordered array of content sections to render. See [`PrintSections`](/api/types#printsections) for all 16 variants.
+    </ParamField>
+    <ParamField body="options" type="CodePage" required>
+      ESC/POS page selection and host-side encoding strategy. See [`CodePage`](/api/types#codepage).
+    </ParamField>
+    <ParamField body="paper_size" type="PaperSize" default="Mm80">
+      Paper roll width. One of `'Mm40'` | `'Mm44'` | `'Mm58'` | `'Mm72'` | `'Mm80'` | `'Mm104'`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+`Promise<void>` — resolves when the printer has accepted the job.
+
+### Throws
+
+`string` — a descriptive error message when the job fails. Common messages include:
+
+- `"Printer not specified"`
+- `"Barcode data cannot be empty"`
+- `"Barcode type 'EAN13' only accepts numeric digits"`
+- `"QR data length 5000 exceeds maximum 4296 for error correction level 'M'"`
+- `"Table row 2 has 2 cells but 3 columns declared"`
+- `"column_widths sum (45) must equal paper chars_per_line (48)"`
+- `"Image data cannot be empty"`
+
+### Example
+
+```typescript
+import {
+  print_thermal_printer,
+  ENCODE,
+  title,
+  text,
+  line,
+  barcode,
+  feed,
+  cut,
+  TEXT_ALIGN,
+  BARCODE_TYPE,
+  type PrintJobRequest,
+} from 'tauri-plugin-thermal-printer'
+
+const job: PrintJobRequest = {
+  printer: 'TM-T20II',
+  paper_size: 'Mm80',
+  options: {
+    code_page: 6,
+    encode: ENCODE.WINDOWS_1252,
+    use_gbk: false,
+  },
+  sections: [
+    title('My Business'),
+    text('Thank you for your purchase!', { align: TEXT_ALIGN.CENTER }),
+    line('='),
+    barcode('123456789012', BARCODE_TYPE.EAN13),
+    feed(3),
+    cut(),
+  ],
+}
+
+try {
+  await print_thermal_printer(job)
+  console.log('Print job sent successfully')
+} catch (error) {
+  // error is a string, e.g. "Printer not found"
+  console.error('Print failed:', error)
+}
+```
+
+---
+
+## `list_thermal_printers`
+
+```typescript
+async function list_thermal_printers(): Promise<PrinterInfo[]>
+```
+
+Queries the operating system for all configured printers and returns their metadata. On Linux and macOS this calls `lpstat`; on Windows it uses `EnumPrintersW` via WinAPI.
+
+**IPC command:** `plugin:thermal-printer|list_thermal_printers`
+
+### Parameters
+
+This function takes no parameters.
+
+### Returns
+
+`Promise<PrinterInfo[]>` — resolves with an array of printer descriptor objects.
+
+<ResponseField name="PrinterInfo[]" type="array">
+  Each element is a `PrinterInfo` object with the following fields:
+
+  <Expandable title="PrinterInfo fields">
+    <ResponseField name="name" type="string">
+      Human-readable printer name as registered with the OS (e.g. `"TM-T20II"`).
+    </ResponseField>
+    <ResponseField name="interface_type" type="string">
+      Connection interface reported by the OS (e.g. `"USB"`, `"NETWORK"`, `"BLUETOOTH"`).
+    </ResponseField>
+    <ResponseField name="identifier" type="string">
+      Unique identifier for the printer, such as a USB device path or `IP:PORT` string (e.g. `"192.168.1.100:9100"`).
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current printer status string (e.g. `"IDLE"`, `"BUSY"`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Throws
+
+`string` — an error message when enumeration fails (e.g. CUPS is not available on the system).
+
+### Example
+
+```typescript
+import { list_thermal_printers } from 'tauri-plugin-thermal-printer'
+
+try {
+  const printers = await list_thermal_printers()
+
+  // Example response:
+  // [
+  //   { name: "TM-T20II",        interface_type: "USB",     identifier: "usb://EPSON/TM-T20II",  status: "IDLE" },
+  //   { name: "Star TSP143III",  interface_type: "NETWORK", identifier: "192.168.1.100:9100",    status: "IDLE" }
+  // ]
+
+  if (printers.length === 0) {
+    console.warn('No printers found')
+  } else {
+    printers.forEach(p => {
+      console.log(`${p.name} [${p.interface_type}] — ${p.status}`)
+    })
+  }
+} catch (error) {
+  console.error('Could not list printers:', error)
+}
+```
+
+---
+
+## `test_thermal_printer`
+
+```typescript
+async function test_thermal_printer(testPrintRequest: TestPrintRequest): Promise<void>
+```
+
+Sends a structured test job to a printer so you can verify each capability (text styles, barcodes, QR codes, images, feeds, beep, cash drawer, etc.) without writing a full print job by hand. Every test section is opt-in; set only the flags you need.
+
+**IPC command:** `plugin:thermal-printer|test_thermal_printer`
+
+### Parameters
+
+<ParamField body="testPrintRequest" type="TestPrintRequest" required>
+  Full test configuration object. `printer_info` is required; all test flags are optional and default to `false` unless noted otherwise.
+
+  <Expandable title="TestPrintRequest fields">
+    <ParamField body="printer_info" type="PrintJobRequest" required>
+      Printer configuration (same as `PrintJobRequest`). The `sections` array is ignored — the backend builds test sections automatically based on the flags below.
+    </ParamField>
+
+    | Field | Type | Default | Description |
+    |---|---|---|---|
+    | `include_text` | `boolean` | `false` | Print a basic text sample. |
+    | `include_custom_text` | `boolean` | `false` | Print the value of `custom_text`. |
+    | `custom_text` | `string \| null` | `null` | Custom text printed when `include_custom_text` is `true`. |
+    | `include_text_styles` | `boolean` | `false` | Print bold, underline, and inverted style samples. |
+    | `include_alignment` | `boolean` | `false` | Print left, center, and right alignment samples. |
+    | `include_columns` | `boolean` | `false` | Print a multi-column table sample. |
+    | `include_separators` | `boolean` | `false` | Print horizontal separator line samples. |
+    | `include_barcode` | `boolean` | `false` | Print a CODE128 barcode sample. |
+    | `include_barcode_types` | `boolean` | `false` | Print one sample for every supported barcode type. |
+    | `include_qr` | `boolean` | `false` | Print a QR code sample. |
+    | `include_image` | `boolean` | `false` | Print the image supplied in `image_base64`. |
+    | `image_base64` | `string \| null` | `null` | Base64 image used when `include_image` is `true`. |
+    | `include_beep` | `boolean` | `false` | Emit a beep. |
+    | `test_cash_drawer` | `boolean` | `false` | Open the cash drawer. |
+    | `cut_paper` | `boolean` | `false` | Cut the paper at the end of the test. |
+    | `test_feed` | `boolean` | `false` | Run a paper-feed test. |
+    | `test_all_fonts` | `boolean` | `false` | Print samples for every available font (A, B, C). |
+    | `test_invert` | `boolean` | `false` | Print an inverted-text sample. |
+    | `test_rotate` | `boolean` | `false` | Print a 90° rotated text sample. |
+  </Expandable>
+</ParamField>
+
+### Returns
+
+`Promise<void>` — resolves when the test print job has been accepted by the printer.
+
+### Throws
+
+`string` — a descriptive error message if the test job fails (e.g. printer unreachable, invalid image data).
+
+### Example
+
+```typescript
+import {
+  test_thermal_printer,
+  ENCODE,
+  type TestPrintRequest,
+} from 'tauri-plugin-thermal-printer'
+
+const request: TestPrintRequest = {
+  printer_info: {
+    printer: 'TM-T20II',
+    paper_size: 'Mm80',
+    options: {
+      code_page: 6,
+      encode: ENCODE.WINDOWS_1252,
+      use_gbk: false,
+    },
+    sections: [], // ignored by the backend during test mode
+  },
+  include_text: true,
+  include_text_styles: true,
+  include_alignment: true,
+  include_columns: true,
+  include_separators: true,
+  include_barcode: true,
+  include_barcode_types: false,
+  include_qr: true,
+  include_image: false,
+  image_base64: null,
+  include_beep: true,
+  test_cash_drawer: false,
+  cut_paper: true,
+  test_feed: true,
+  test_all_fonts: false,
+  test_invert: false,
+  test_rotate: false,
+}
+
+try {
+  await test_thermal_printer(request)
+  console.log('Test print completed')
+} catch (error) {
+  console.error('Test print failed:', error)
+}
+```
+
+<Note>
+  The `sections` array inside `printer_info` is not used during a test print. The backend generates all test content automatically from the flags you enable.
+</Note>

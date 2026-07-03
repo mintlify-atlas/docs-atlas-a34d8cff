@@ -1,47 +1,230 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quickstart: Print Your First Thermal Receipt"
+sidebarTitle: "Quickstart"
+description: "List printers, build a print job with real sections, send it to your thermal printer, and run a test print — all in under five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+Once the plugin is installed and registered, printing a receipt takes three API calls: list the available printers, build a `PrintJobRequest` with the sections you want, and call `print_thermal_printer()`. This guide walks through each step and finishes with a complete, copy-pasteable working example using the builder helpers.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="List available printers">
+    Call `list_thermal_printers()` to discover printers the OS knows about. On desktop this queries CUPS (Linux/macOS) or the Windows spooler; on Android it returns discovered Bluetooth and USB devices.
 
-    ```bash
-    npm install your-package
+    ```typescript
+    import { list_thermal_printers, type PrinterInfo } from "tauri-plugin-thermal-printer";
+
+    try {
+      const printers: PrinterInfo[] = await list_thermal_printers();
+      console.log("Available printers:", printers);
+    } catch (error) {
+      console.error("Could not list printers:", error);
+    }
+    ```
+
+    Each entry in the returned array is a `PrinterInfo` object:
+
+    ```json
+    [
+      {
+        "name": "TM-T20II",
+        "interface_type": "USB",
+        "identifier": "usb://EPSON/TM-T20II",
+        "status": "IDLE"
+      },
+      {
+        "name": "Star TSP143III",
+        "interface_type": "NETWORK",
+        "identifier": "192.168.1.100:9100",
+        "status": "IDLE"
+      }
+    ]
+    ```
+
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `name` | `string` | Human-readable printer name |
+    | `interface_type` | `string` | Connection type, e.g. `"USB"`, `"NETWORK"` |
+    | `identifier` | `string` | Unique identifier — URI for desktop, MAC address for Android Bluetooth |
+    | `status` | `string` | Current status, e.g. `"IDLE"`, `"BUSY"` |
+
+    <Note>
+    On Android, pass the `identifier` (MAC address such as `"AA:BB:CC:DD:EE:FF"`) as the `printer` field in your `PrintJobRequest`. The printer must be paired in the Android Bluetooth settings beforehand.
+    </Note>
+  </Step>
+
+  <Step title="Build a print job">
+    A `PrintJobRequest` has four fields: the target printer name, an optional paper size, a `CodePage` encoding configuration, and an array of `sections`. Sections are typed union variants — each one maps to a distinct ESC/POS element.
+
+    ```typescript
+    import {
+      type PrintJobRequest,
+      ENCODE,
+    } from "tauri-plugin-thermal-printer";
+
+    const job: PrintJobRequest = {
+      printer: "TM-T20II",       // name from list_thermal_printers()
+      paper_size: "Mm80",         // 80mm — 48 chars/line (default)
+      options: {
+        code_page: 0,             // ESC t n value sent to the printer
+        encode: ENCODE.ACCENT_REMOVER,
+        use_gbk: false,
+      },
+      sections: [
+        { "Title":    { "text": "MY COFFEE SHOP" } },
+        { "Text":     { "text": "Date: 2026-01-15 09:30" } },
+        { "Line":     { "character": "=" } },
+        { "Text":     { "text": "1x Americano         $2.50" } },
+        { "Text":     { "text": "2x Croissant         $7.00" } },
+        { "Line":     { "character": "-" } },
+        { "Text":     { "text": "Total: $9.50", "styles": { "bold": true } } },
+        { "Feed":     { "feed_type": "lines", "value": 2 } },
+        { "Cut":      { "mode": "partial", "feed": 0 } },
+      ],
+    };
+    ```
+
+    <Tip>
+    Use the exported builder helpers (`title()`, `text()`, `line()`, `cut()`, etc.) instead of writing raw object literals. They are shorter, fully typed, and carry sensible defaults. See [Step 4](#step-4-full-example-with-builder-helpers) for the same receipt written with builders.
+    </Tip>
+  </Step>
+
+  <Step title="Send the print job">
+    Pass the `PrintJobRequest` to `print_thermal_printer()`. The function returns `Promise<void>` and **throws a descriptive string** on failure — always wrap it in `try/catch`.
+
+    ```typescript
+    import { print_thermal_printer, type PrintJobRequest } from "tauri-plugin-thermal-printer";
+
+    try {
+      await print_thermal_printer(job);
+      console.log("Print job sent successfully!");
+    } catch (error) {
+      // error is a string, for example:
+      // "Printer not specified"
+      // "Barcode data cannot be empty"
+      // "QR data length 5000 exceeds maximum 4296 for error correction level 'M'"
+      // "column_widths sum (45) must equal paper chars_per_line (48)"
+      console.error("Print failed:", error);
+    }
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  <Step title="Test the printer">
+    Before building a full print job, use `test_thermal_printer()` to send a built-in diagnostic printout. Pass a `TestPrintRequest` that wraps a minimal `PrintJobRequest` plus flags for which test sections to include.
 
-    ```bash
-    your-cli start
+    ```typescript
+    import {
+      test_thermal_printer,
+      type TestPrintRequest,
+      ENCODE,
+    } from "tauri-plugin-thermal-printer";
+
+    try {
+      await test_thermal_printer({
+        printer_info: {
+          printer: "TM-T20II",
+          paper_size: "Mm80",
+          options: {
+            code_page: 6,
+            encode: ENCODE.WINDOWS_1252,
+            use_gbk: false,
+          },
+          sections: [], // sections are ignored; the plugin generates its own test content
+        },
+        include_text: true,
+        include_text_styles: true,
+        include_alignment: true,
+        include_columns: true,
+        include_separators: true,
+        include_barcode: true,
+        include_qr: true,
+        include_beep: true,
+        cut_paper: true,
+        test_feed: true,
+      } as TestPrintRequest);
+
+      console.log("Test print completed.");
+    } catch (error) {
+      console.error("Test print failed:", error);
+    }
     ```
+
+    All fields after `printer_info` are optional and default to `false` / `null` when omitted, so you can start with just the printer config and enable sections as needed.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Full Example with Builder Helpers
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+The builder helpers produce the same `PrintSections` objects as raw literals but are more concise and provide full TypeScript autocomplete. The receipt below is functionally identical to the raw-object example in Step 2.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  text,
+  line,
+  feed,
+  cut,
+  ENCODE,
+  TEXT_ALIGN,
+  TEXT_SIZE,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    title("MY COFFEE SHOP"),
+    text("Date: 2026-01-15 09:30"),
+    line("="),
+    text("1x Americano         $2.50"),
+    text("2x Croissant         $7.00"),
+    line("-"),
+    text("Total: $9.50", { bold: true, size: TEXT_SIZE.DOUBLE, align: TEXT_ALIGN.RIGHT }),
+    feed(2),
+    cut(),
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+  console.log("Receipt printed!");
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+### Builder reference (quick lookup)
+
+| Helper | Description | Key defaults |
+|--------|-------------|--------------|
+| `title(text, styles?)` | `{ Title: ... }` — double-size, centered | — |
+| `subtitle(text, styles?)` | `{ Subtitle: ... }` — bold, taller | — |
+| `text(text, styles?)` | `{ Text: ... }` — normal text | — |
+| `line(character?)` | `{ Line: ... }` — full-width separator | `"-"` |
+| `feed(value, type?)` | `{ Feed: ... }` — advance paper | `"lines"` |
+| `cut(mode?, feedLines?)` | `{ Cut: ... }` — cut paper | `"partial"`, `4` lines |
+| `qr(data, options?)` | `{ Qr: ... }` — QR code | size `6`, correction `"M"`, model `2` |
+| `barcode(data, type?, options?)` | `{ Barcode: ... }` — barcode | `"CODE128"`, width `3`, height `80`, `"below"` |
+| `beep(times?, duration?)` | `{ Beep: ... }` — audible beep | `1` beep, duration `3` |
+| `drawer(pin?, pulse_time?)` | `{ Drawer: ... }` — cash drawer | pin `2`, `120` ms |
+| `table(columns, body, options?)` | `{ Table: ... }` — columnar table | `truncate: true` |
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Section Types" icon="layer-group" href="sections/text-sections">
+    Explore all 16 section types — Title, Subtitle, Text, Table, QR, Barcode, Image, and more — with full field references.
+  </Card>
+  <Card title="Android Guide" icon="mobile" href="guides/android">
+    Learn how Bluetooth pairing works, how to get the MAC address from `list_thermal_printers()`, and how to handle Android-specific edge cases.
+  </Card>
+  <Card title="API Reference" icon="code" href="api/functions">
+    Full TypeScript API reference for `print_thermal_printer`, `list_thermal_printers`, `test_thermal_printer`, and every exported type and constant.
+  </Card>
+</CardGroup>

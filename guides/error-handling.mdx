@@ -1,0 +1,227 @@
+---
+title: "Error Handling for Thermal Printer Functions"
+sidebarTitle: "Error Handling"
+description: "All three plugin functions throw a plain string on failure. Learn which errors to expect, how to catch them, and best practices for robust print workflows."
+---
+
+All three functions exposed by the plugin — `print_thermal_printer`, `test_thermal_printer`, and `list_thermal_printers` — are `async` and return a `Promise` that **rejects with a plain `string`** when something goes wrong. There are no error classes or structured error objects: the rejection value is a human-readable message you can display directly to the user or log for debugging.
+
+Always wrap every call in a `try/catch` block. Letting a thermal printer error propagate unhandled will cause an unhandled promise rejection in your application.
+
+## Function Return Types
+
+| Function | Return type | Throws |
+|---|---|---|
+| `print_thermal_printer(job)` | `Promise<void>` | `string` describing the failure |
+| `test_thermal_printer(request)` | `Promise<void>` | `string` describing the failure |
+| `list_thermal_printers()` | `Promise<PrinterInfo[]>` | `string` describing the failure |
+
+## Error Messages Reference
+
+The following error strings are emitted directly by the plugin's Rust layer and will appear verbatim as the caught value in your `catch` block.
+
+<CardGroup cols={2}>
+  <Card title="Printer not specified" icon="printer">
+    The `printer` field in `PrintJobRequest` is an empty string. Always supply a non-empty printer name (desktop) or MAC address (Android).
+  </Card>
+  <Card title="Barcode data cannot be empty" icon="barcode">
+    A `Barcode` section was added with an empty `data` string. Validate barcode data before building the job.
+  </Card>
+  <Card title="Barcode type 'EAN13' only accepts numeric digits" icon="input-numeric">
+    Numeric-only barcode types (`UPC-A`, `UPC-E`, `EAN13`, `EAN8`, `ITF`) reject non-digit characters. Strip any spaces, dashes, or letters before passing the data.
+  </Card>
+  <Card title="QR data length exceeds maximum" icon="qrcode">
+    The full message is `"QR data length 5000 exceeds maximum 4296 for error correction level 'M'"`. The maximum QR payload depends on the `error_correction` level — use `"L"` for the largest capacity (7089 chars).
+  </Card>
+  <Card title="Table row has wrong cell count" icon="table">
+    The full message is `"Table row 2 has 2 cells but 3 columns declared"`. Every row in `body` (and every entry in `header`) must have exactly `columns` cells.
+  </Card>
+  <Card title="column_widths sum mismatch" icon="ruler">
+    The full message is `"column_widths sum (45) must equal paper chars_per_line (48)"`. When you provide `column_widths`, their sum must equal the paper's characters-per-line (e.g. 48 for `Mm80`).
+  </Card>
+  <Card title="Image data cannot be empty" icon="image">
+    An `Image` section was added with an empty `data` string. Ensure your base64 image string is non-empty before building the job.
+  </Card>
+  <Card title="No sections to print" icon="list">
+    The `sections` array in `PrintJobRequest` is empty. Add at least one printable section.
+  </Card>
+</CardGroup>
+
+## Handling Each Function
+
+### print_thermal_printer
+
+```typescript
+import {
+  print_thermal_printer,
+  ENCODE,
+  type PrintJobRequest,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+  sections: [
+    { Title: { text: "My Receipt" } },
+    { Feed: { feed_type: "lines", value: 3 } },
+    { Cut: { mode: "partial", feed: 0 } },
+  ],
+};
+
+try {
+  await print_thermal_printer(job);
+  // Job dispatched successfully — printer is processing
+} catch (error) {
+  // `error` is always a string, e.g.:
+  // "Printer not specified"
+  // "Barcode data cannot be empty"
+  // "QR data length 5000 exceeds maximum 4296 for error correction level 'M'"
+  // "Table row 2 has 2 cells but 3 columns declared"
+  // "column_widths sum (45) must equal paper chars_per_line (48)"
+  // "Image data cannot be empty"
+  console.error("Print failed:", error);
+  alert(`Printing failed: ${error}`);
+}
+```
+
+### test_thermal_printer
+
+```typescript
+import {
+  test_thermal_printer,
+  ENCODE,
+  type TestPrintRequest,
+} from "tauri-plugin-thermal-printer";
+
+const request: TestPrintRequest = {
+  printer_info: {
+    printer: "TM-T20II",
+    paper_size: "Mm80",
+    options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+    sections: [],
+  },
+  include_text: true,
+  include_qr: true,
+  include_barcode: true,
+  cut_paper: true,
+};
+
+try {
+  await test_thermal_printer(request);
+  console.log("Test print completed successfully");
+} catch (error) {
+  console.error("Test print failed:", error);
+}
+```
+
+### list_thermal_printers
+
+`list_thermal_printers` can fail if the system's printer subsystem is unavailable — for example if CUPS is not running on Linux, or if Bluetooth permissions are denied on Android.
+
+```typescript
+import {
+  list_thermal_printers,
+  type PrinterInfo,
+} from "tauri-plugin-thermal-printer";
+
+try {
+  const printers: PrinterInfo[] = await list_thermal_printers();
+
+  if (printers.length === 0) {
+    console.warn("No printers found on this system");
+  } else {
+    console.log("Available printers:", printers);
+  }
+} catch (error) {
+  // e.g. "Bluetooth permission denied" (Android)
+  // e.g. CUPS / system error message (Linux/macOS)
+  console.error("Could not list printers:", error);
+}
+```
+
+## Combining List and Print with Error Handling
+
+A common pattern is to list printers, let the user choose one, and then send a print job — all with full error handling at every step:
+
+```typescript
+import {
+  list_thermal_printers,
+  print_thermal_printer,
+  ENCODE,
+  type PrinterInfo,
+  type PrintJobRequest,
+} from "tauri-plugin-thermal-printer";
+
+async function printReceipt(receiptData: { title: string; total: string }) {
+  // Step 1: discover available printers
+  let printers: PrinterInfo[];
+  try {
+    printers = await list_thermal_printers();
+  } catch (error) {
+    throw new Error(`Could not enumerate printers: ${error}`);
+  }
+
+  if (printers.length === 0) {
+    throw new Error("No printers found. Please connect a printer and try again.");
+  }
+
+  // Step 2: select the first available printer (or let the user choose)
+  const target = printers[0];
+
+  // Step 3: build the print job
+  const job: PrintJobRequest = {
+    printer: target.identifier ?? target.name,
+    paper_size: "Mm80",
+    options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+    sections: [
+      { Title: { text: receiptData.title } },
+      { Line: { character: "=" } },
+      { Text: { text: `Total: ${receiptData.total}`, styles: { bold: true } } },
+      { Feed: { feed_type: "lines", value: 3 } },
+      { Cut: { mode: "partial", feed: 0 } },
+    ],
+  };
+
+  // Step 4: send the job
+  try {
+    await print_thermal_printer(job);
+  } catch (error) {
+    throw new Error(`Print job failed: ${error}`);
+  }
+}
+
+// Usage
+printReceipt({ title: "Order #1042", total: "$9.50" }).catch((err) => {
+  console.error(err.message);
+});
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always use try/catch" icon="shield-check">
+    Every plugin call can throw. Wrapping in `try/catch` prevents unhandled promise rejections and gives you a chance to show the user a meaningful message.
+  </Card>
+  <Card title="Validate before sending" icon="circle-check">
+    Check that barcode data is non-empty and numeric for types that require it, that QR data does not exceed the limit for your chosen error correction level, and that table `column_widths` sum matches the paper's `chars_per_line`.
+  </Card>
+  <Card title="Show errors to users" icon="message-alert">
+    The thrown string is already human-readable. Surface it directly in a toast, alert, or status bar so the operator can act on it (e.g. "Printer not specified" → prompt them to select a printer).
+  </Card>
+  <Card title="Log for debugging" icon="bug">
+    Log the full error string alongside the job parameters for diagnosing encoding or configuration issues in production. The error message includes the relevant values (e.g. the actual QR data length and the maximum).
+  </Card>
+</CardGroup>
+
+<Tip>
+  Use the paper size helpers to avoid `column_widths` mismatch errors. `getPaperSizeCharsPerLine("Mm80")` returns `48`, so your column widths must sum to exactly `48` for an 80mm print job.
+
+  ```typescript
+  import { getPaperSizeCharsPerLine } from "tauri-plugin-thermal-printer";
+
+  const charsPerLine = getPaperSizeCharsPerLine("Mm80"); // 48
+  // Widths [16, 16, 16] sum to 48 ✅
+  // Widths [10, 15, 10] sum to 35 ❌ — will throw
+  ```
+</Tip>

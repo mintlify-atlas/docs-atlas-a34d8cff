@@ -1,0 +1,279 @@
+---
+title: "Printing Receipts with Tauri Thermal Printer"
+sidebarTitle: "Receipts"
+description: "Complete receipt examples for retail and payment use-cases — supermarket shopping receipts with item tables and a bank-transfer payment receipt."
+---
+
+Receipts are the most common thermal-printer output. A well-structured receipt combines a store header, an itemised table, totals, payment details, and an optional QR code — all within the 48-character line width of standard 80 mm paper. The examples below show two production-ready receipt layouts that you can drop straight into your Tauri application.
+
+<Note>
+  On 80 mm (`Mm80`) paper the printer exposes **48 characters per line**. Every `Table` that sets explicit `column_widths` must have widths that sum to exactly **48**, or the backend will throw a `column_widths sum (N) must equal paper chars_per_line (48)` error.
+</Note>
+
+## Supermarket Receipt (80 mm)
+
+A full shopping receipt with store header, cashier info, itemised product table, tax breakdown, payment details, a QR code, and a CODE128 barcode. The builder-helper style (`title()`, `text()`, `line()`, etc.) keeps the section array readable at a glance.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  subtitle,
+  text,
+  line,
+  feed,
+  qr,
+  barcode,
+  table,
+  ENCODE,
+  TEXT_ALIGN,
+  BARCODE_TYPE,
+  BARCODE_TEXT_POSITION,
+  QR_ERROR_CORRECTION,
+} from "tauri-plugin-thermal-printer";
+
+const supermarketReceipt: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    // ACCENT_REMOVER converts á→a, ñ→n, etc. so any printer
+    // that lacks a Latin code page still renders text cleanly.
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    // ── Store header ────────────────────────────────────────────
+    title("SUPERMERCADO LA ECONOMIA"),
+    text("Sucursal Centro",             { align: TEXT_ALIGN.CENTER }),
+    text("Av. Juarez #1234, Col. Centro", { align: TEXT_ALIGN.CENTER }),
+    text("Tel: (555) 123-4567",          { align: TEXT_ALIGN.CENTER }),
+    text("RFC: SUPE850101ABC",           { align: TEXT_ALIGN.CENTER }),
+    line("="),
+
+    // ── Transaction metadata ─────────────────────────────────────
+    text("TICKET DE COMPRA",             { bold: true, align: TEXT_ALIGN.CENTER }),
+    text("Fecha: 14/10/2025  15:45:30"),
+    text("Ticket: #0012345"),
+    text("Cajero: Maria Gonzalez"),
+    text("Caja: 03"),
+    line("="),
+
+    // ── Items table (columns sum = 5 + 20 + 11 + 12 = 48) ───────
+    table(
+      4,
+      [
+        [
+          text("2"),
+          text("Leche Lala 1L"),
+          text("$22.50", { align: TEXT_ALIGN.RIGHT }),
+          text("$45.00", { align: TEXT_ALIGN.RIGHT }),
+        ],
+        [
+          text("1"),
+          text("Pan Bimbo Blanco"),
+          text("$38.00", { align: TEXT_ALIGN.RIGHT }),
+          text("$38.00", { align: TEXT_ALIGN.RIGHT }),
+        ],
+        [
+          text("3"),
+          text("Coca Cola 600ml"),
+          text("$16.00", { align: TEXT_ALIGN.RIGHT }),
+          text("$48.00", { align: TEXT_ALIGN.RIGHT }),
+        ],
+        [
+          text("1"),
+          text("Cereal Zucaritas"),
+          text("$75.00", { align: TEXT_ALIGN.RIGHT }),
+          text("$75.00", { align: TEXT_ALIGN.RIGHT }),
+        ],
+        [
+          text("1"),
+          text("Azucar 1kg"),
+          text("$25.00", { align: TEXT_ALIGN.RIGHT }),
+          text("$25.00", { align: TEXT_ALIGN.RIGHT }),
+        ],
+      ],
+      {
+        column_widths: [5, 20, 11, 12], // 5+20+11+12 = 48 ✓
+        header: [
+          text("CANT",       { bold: true }),
+          text("DESCRIPCION",{ bold: true }),
+          text("P.U.",       { bold: true, align: TEXT_ALIGN.RIGHT }),
+          text("TOTAL",      { bold: true, align: TEXT_ALIGN.RIGHT }),
+        ],
+        truncate: false,
+      },
+    ),
+    line("="),
+
+    // ── Tax breakdown (columns sum = 32 + 16 = 48) ───────────────
+    table(
+      2,
+      [
+        [ text("SUBTOTAL:"),  text("$1,280.00", { align: TEXT_ALIGN.RIGHT }) ],
+        [ text("IVA (16%):"), text("$204.80",   { align: TEXT_ALIGN.RIGHT }) ],
+      ],
+      { column_widths: [32, 16], truncate: false },
+    ),
+    line("="),
+
+    text("TOTAL: $1,484.80", { bold: true, align: TEXT_ALIGN.CENTER }),
+    line("="),
+
+    // ── Payment details ──────────────────────────────────────────
+    text("Forma de Pago: EFECTIVO"),
+    table(
+      2,
+      [
+        [ text("Pago con:"), text("$1,500.00", { align: TEXT_ALIGN.RIGHT }) ],
+        [ text("Cambio:"),   text("$15.20",    { align: TEXT_ALIGN.RIGHT }) ],
+      ],
+      { column_widths: [32, 16], truncate: false },
+    ),
+    line("-"),
+
+    text("Articulos: 25",         { align: TEXT_ALIGN.CENTER }),
+    text("Ahorro total: $85.50",  { align: TEXT_ALIGN.CENTER }),
+    line("-"),
+
+    text("!GRACIAS POR SU COMPRA!", { bold: true, align: TEXT_ALIGN.CENTER }),
+    text("Vuelva pronto",           { align: TEXT_ALIGN.CENTER }),
+    text("www.supereconomia.com",   { align: TEXT_ALIGN.CENTER }),
+
+    // ── Machine-readable codes ───────────────────────────────────
+    { Qr: {
+        data: "https://supereconomia.com/ticket/0012345",
+        size: 5,
+        error_correction: QR_ERROR_CORRECTION.M,
+        model: 2,
+        align: TEXT_ALIGN.CENTER,
+    }},
+    barcode("0012345", BARCODE_TYPE.CODE128, {
+      width: 2,
+      height: 50,
+      text_position: BARCODE_TEXT_POSITION.BELOW,
+      align: TEXT_ALIGN.CENTER,
+    }),
+    feed(3),
+  ],
+};
+
+try {
+  await print_thermal_printer(supermarketReceipt);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+<Tip>
+  The `ENCODE.ACCENT_REMOVER` strategy silently converts accented and special
+  characters (á → a, ñ → n, € → EUR) before bytes are sent to the printer. This
+  means a store name like "SUPERMERCADO LA ECONOMÍA" prints cleanly on any
+  printer regardless of its configured code page.
+</Tip>
+
+---
+
+## Payment Receipt (80 mm)
+
+A bank-transfer confirmation receipt showing sender/receiver account details, transaction amount, concept, fees, and a status line. This is a common output for POS terminals and teller windows.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title,
+  text,
+  line,
+  feed,
+  ENCODE,
+  TEXT_ALIGN,
+} from "tauri-plugin-thermal-printer";
+
+const paymentReceipt: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: {
+    code_page: 0,
+    encode: ENCODE.ACCENT_REMOVER,
+    use_gbk: false,
+  },
+  sections: [
+    // ── Header ────────────────────────────────────────────────────
+    title("COMPROBANTE DE PAGO"),
+    line("="),
+    text("Banco Nacional",     { align: TEXT_ALIGN.CENTER }),
+    text("Sucursal Centro",    { align: TEXT_ALIGN.CENTER }),
+    text("Operacion: 987654321"),
+    text("Fecha: 14/10/2025  16:23:45"),
+    line("="),
+
+    // ── Transfer type ─────────────────────────────────────────────
+    text("TRANSFERENCIA ELECTRONICA", { bold: true, align: TEXT_ALIGN.CENTER }),
+    line("-"),
+
+    // ── Sender ────────────────────────────────────────────────────
+    text("De:",                  { bold: true }),
+    text("  Cuenta: ****5678"),
+    text("  Nombre: Juan Perez"),
+    line("-"),
+
+    // ── Recipient ─────────────────────────────────────────────────
+    text("Para:",                { bold: true }),
+    text("  Cuenta: ****9012"),
+    text("  Nombre: Maria Lopez"),
+    line("="),
+
+    // ── Amount ───────────────────────────────────────────────────
+    text("MONTO: $5,000.00 MXN", { bold: true, align: TEXT_ALIGN.CENTER }),
+    line("="),
+
+    // ── Concept & fees ────────────────────────────────────────────
+    text("Concepto:"),
+    text("Pago de renta mensual"),
+    line("-"),
+    text("Comision: $0.00"),
+    text("IVA: $0.00"),
+    line("="),
+
+    // ── Grand total ───────────────────────────────────────────────
+    text("TOTAL: $5,000.00", { bold: true, align: TEXT_ALIGN.CENTER }),
+    line("="),
+
+    // ── Status & reference ────────────────────────────────────────
+    text("Estado: EXITOSA"),
+    text("Referencia: 123456789012345"),
+    text("Folio fiscal: ABCD-1234-EFGH"),
+    feed(3),
+  ],
+};
+
+try {
+  await print_thermal_printer(paymentReceipt);
+} catch (error) {
+  console.error("Print failed:", error);
+}
+```
+
+---
+
+## Paper Size Notes
+
+<CardGroup cols={2}>
+  <Card title="80 mm (Mm80) — Default" icon="receipt">
+    48 characters per line, 576 px wide. Best for full POS receipts with tables
+    and barcodes. All column widths in a table must sum to **48**.
+  </Card>
+  <Card title="58 mm (Mm58) — Compact" icon="mobile">
+    32 characters per line, 384 px wide. Typical for portable/handheld printers.
+    Column widths must sum to **32** for this paper size.
+  </Card>
+</CardGroup>
+
+<Note>
+  When you omit `column_widths` from a `Table` section the backend distributes
+  columns evenly. Specifying widths explicitly is recommended for receipts where
+  right-alignment of prices must be precise.
+</Note>

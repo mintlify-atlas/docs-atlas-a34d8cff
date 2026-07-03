@@ -1,0 +1,90 @@
+---
+title: "Tauri Plugin Thermal Printer — Introduction"
+sidebarTitle: "Introduction"
+description: "Learn what tauri-plugin-thermal-printer is, how the ESC/POS→Tauri→OS pipeline works, and which platforms and connection types are supported."
+---
+
+Tauri Plugin Thermal Printer is a Tauri v2 plugin that gives your desktop and Android applications a clean TypeScript/JavaScript API for printing to ESC/POS thermal printers. Instead of wrestling with raw escape-sequence bytes or platform-specific printer drivers, you describe your receipt, label, or ticket as a structured `PrintJobRequest` — titles, text, tables, barcodes, QR codes, images, and more — and the plugin handles everything else: generating the binary ESC/POS commands in Rust, routing them to the correct operating-system interface, and sending them over USB, network, or Bluetooth to your printer.
+
+## How It Works
+
+The plugin acts as a translator between a friendly JavaScript/TypeScript API and the low-level binary protocol that thermal printers speak. All ESC/POS command generation is done in a single shared Rust pipeline (`ProcessPrint`), so receipts look identical regardless of platform.
+
+```
+Frontend (TypeScript)
+    ↓  IPC commands via @tauri-apps/api
+Tauri Core (Rust)  ←— ESC/POS generation (shared across all platforms)
+    ↓  Platform-specific dispatch
+    ├── Desktop (Linux / macOS / Windows)
+    │       ↓  Raw binary data
+    │   Operating System printer subsystem (CUPS / WinAPI)
+    │       ↓
+    │   Thermal Printer (ESC/POS protocol)
+    │
+    └── Android — Kotlin plugin
+            ↓  Bluetooth SPP / RFCOMM
+        Thermal Printer (ESC/POS protocol)
+```
+
+The three Tauri commands exposed to your frontend are:
+
+- **`list_thermal_printers()`** — enumerate available printers on the current system
+- **`print_thermal_printer(job)`** — send a structured print job to a named printer
+- **`test_thermal_printer(request)`** — run a built-in test print to verify a printer works
+
+## Platform Support
+
+| Platform | Supported | Notes |
+|----------|-----------|-------|
+| Linux    | ✅        | Fully functional via CUPS (`lpstat`, `lp`) |
+| macOS    | ✅        | Fully functional via CUPS |
+| Windows  | ✅        | Fully functional via WinAPI (`EnumPrintersW`, `WritePrinter`) |
+| Android  | ✅        | Bluetooth (SPP/RFCOMM) and USB printer discovery |
+| iOS      | ❌        | Not implemented |
+
+## Connection Type Support
+
+| Connection | Linux | macOS | Windows | Android |
+|------------|-------|-------|---------|---------|
+| USB        | ✅    | ✅    | ✅      | ✅ (discovery only) |
+| Network    | ✅    | ✅    | ✅      | ❌ |
+| Bluetooth  | ❌    | ❌    | ❌      | ✅ |
+
+<Note>
+On Android the `printer` field in `PrintJobRequest` must be the Bluetooth MAC address of a previously paired printer (e.g. `"AA:BB:CC:DD:EE:FF"`). Bluetooth runtime permissions are requested automatically — you do not need to declare them yourself.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Cross-Platform Printing" icon="print">
+    A single TypeScript API targets Linux, macOS, Windows, and Android. ESC/POS generation is shared across all platforms in Rust, so output is byte-for-byte consistent.
+  </Card>
+  <Card title="Rich Section Types" icon="list">
+    Build print jobs from titles, subtitles, plain text, tables, barcodes, QR codes, DataMatrix, PDF417, images, logos, separator lines, paper cuts, beeps, and cash-drawer pulses.
+  </Card>
+  <Card title="Builder Helpers" icon="code">
+    The npm package ships typed builder functions — `title()`, `text()`, `line()`, `cut()`, `qr()`, `barcode()`, and more — so you never write raw object literals or guess enum names.
+  </Card>
+  <Card title="Style Constants" icon="palette">
+    Exported constants (`TEXT_ALIGN`, `TEXT_SIZE`, `BARCODE_TYPE`, `QR_ERROR_CORRECTION`, …) give you autocomplete-friendly access to every string value the plugin accepts.
+  </Card>
+  <Card title="Flexible Encoding" icon="globe">
+    `CodePage` lets you choose the `ESC t n` page number sent to the printer and the host-side encoding strategy (`ENCODE.WINDOWS_1252`, `ENCODE.GBK`, `ENCODE.SHIFT_JIS`, `ENCODE.ACCENT_REMOVER`, and every `encoding_rs` static).
+  </Card>
+  <Card title="Tauri v2 Permissions" icon="shield">
+    Three granular capabilities — `allow-list-thermal-printers`, `allow-print-thermal-printer`, `allow-test-thermal-printer` — integrate with Tauri v2's capability system so you only grant what your app needs.
+  </Card>
+</CardGroup>
+
+## Version Information
+
+| Package | Version |
+|---------|---------|
+| `tauri-plugin-thermal-printer` (Rust crate) | `2.0.1` |
+| `tauri-plugin-thermal-printer` (npm package) | `2.0.1` |
+| Tauri | v2 |
+
+<Warning>
+**Breaking change in v2.0.0:** The `PrinterOptions` interface was removed to simplify configuration. The `options` field in `PrintJobRequest` now directly accepts a `CodePage` object. The shorthand boolean fields `cut_paper`, `beep`, and `open_cash_drawer` were also removed — if you need these actions, add explicit sections (e.g. `{ "Cut": { "mode": "partial", "feed": 0 } }`) to the end of your `sections` array.
+</Warning>

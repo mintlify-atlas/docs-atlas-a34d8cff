@@ -1,0 +1,474 @@
+---
+title: "Text & Table Section Types for Thermal Printers"
+sidebarTitle: "Text & Tables"
+description: "Print titles, subtitles, plain text, tables, separator lines, and global style defaults with the thermal printer plugin's text section types."
+---
+
+Text sections are the backbone of most thermal printer receipts and tickets. They cover everything from bold store headings and item tables to simple separator lines, and a `GlobalStyles` section lets you set formatting defaults that cascade across all subsequent text output without repeating yourself on every line.
+
+## Title
+
+The `Title` section prints a line of text with **forced double size and center alignment**, making it ideal for store names, receipt headers, or any top-level heading. You may pass optional `styles` to override color inversion, font, or other properties, but the double size and center alignment are always applied on top.
+
+<ParamField body="text" type="string" required>
+  The heading text to print.
+</ParamField>
+
+<ParamField body="styles" type="GlobalStyles">
+  Optional style overrides applied on top of the forced defaults. See [GlobalStyles](#globalstyles) for all fields.
+</ParamField>
+
+<CodeGroup>
+```json Minimal
+{
+  "Title": {
+    "text": "MY STORE"
+  }
+}
+```
+
+```json With styles
+{
+  "Title": {
+    "text": "MY STORE",
+    "styles": {
+      "invert": true,
+      "font": "A"
+    }
+  }
+}
+```
+
+```typescript Builder
+import { title } from "tauri-plugin-thermal-printer";
+
+title("MY STORE")
+
+// With optional overrides
+title("MY STORE", { invert: true, font: "A" })
+```
+</CodeGroup>
+
+<Note>
+  Double size and center alignment are **always enforced** for `Title` sections regardless of what you pass in `styles`. To print a heading without these forced styles, use a `Text` section with explicit `size` and `align` values instead.
+</Note>
+
+---
+
+## Subtitle
+
+The `Subtitle` section prints a line with **forced bold and increased height** (taller characters without doubling the width). Use it for secondary headings, branch names, receipt sub-headers, or any text that needs more visual weight than plain `Text` but less dominance than `Title`.
+
+<ParamField body="text" type="string" required>
+  The subtitle text to print.
+</ParamField>
+
+<ParamField body="styles" type="GlobalStyles">
+  Optional style overrides. Bold and height size are always enforced on top.
+</ParamField>
+
+<CodeGroup>
+```json Minimal
+{
+  "Subtitle": {
+    "text": "Downtown Branch"
+  }
+}
+```
+
+```json With styles
+{
+  "Subtitle": {
+    "text": "Downtown Branch",
+    "styles": {
+      "align": "center"
+    }
+  }
+}
+```
+
+```typescript Builder
+import { subtitle } from "tauri-plugin-thermal-printer";
+
+subtitle("Downtown Branch")
+
+// Centered
+subtitle("Downtown Branch", { align: "center" })
+```
+</CodeGroup>
+
+---
+
+## Text
+
+The `Text` section prints a single line (or wrapped block) of content using the current global styles as defaults. Any fields you include in `styles` override the corresponding global default — **you only need to specify what you want to change**. Omitting `styles` entirely inherits whatever `GlobalStyles` was last set.
+
+<ParamField body="text" type="string" required>
+  The text content to print.
+</ParamField>
+
+<ParamField body="styles" type="GlobalStyles">
+  Partial or full style object. Only the fields you set override the current global defaults.
+</ParamField>
+
+<CodeGroup>
+```json Minimal
+{
+  "Text": {
+    "text": "Thank you for your purchase!"
+  }
+}
+```
+
+```json Partial styles (bold + right-aligned)
+{
+  "Text": {
+    "text": "Total: $49.99",
+    "styles": {
+      "bold": true,
+      "align": "right"
+    }
+  }
+}
+```
+
+```json Full styles
+{
+  "Text": {
+    "text": "SPECIAL OFFER",
+    "styles": {
+      "bold": true,
+      "underline": false,
+      "align": "center",
+      "italic": false,
+      "invert": false,
+      "font": "A",
+      "rotate": false,
+      "upside_down": false,
+      "size": "normal"
+    }
+  }
+}
+```
+
+```typescript Builder
+import { text, TEXT_ALIGN, TEXT_SIZE } from "tauri-plugin-thermal-printer";
+
+// Plain
+text("Thank you for your purchase!")
+
+// Partial override
+text("Total: $49.99", { bold: true, align: TEXT_ALIGN.RIGHT })
+
+// Multiple styles
+text("SPECIAL OFFER", {
+  bold: true,
+  align: TEXT_ALIGN.CENTER,
+  size: TEXT_SIZE.DOUBLE,
+})
+```
+</CodeGroup>
+
+<Tip>
+  You only need to specify the style fields you actually want to change. For example, `{ "bold": true }` keeps all other properties at their current global defaults — you do not have to repeat `"underline": false` or `"align": "left"` if they are already set.
+</Tip>
+
+---
+
+## Table
+
+The `Table` section renders a multi-column grid. Columns can have custom widths and each cell supports the same `text` + `styles` structure as a `Text` section. Tables are perfect for item lists, price breakdowns, and any aligned columnar data on a receipt.
+
+<ParamField body="columns" type="number" required>
+  Number of columns in the table (e.g. `3`).
+</ParamField>
+
+<ParamField body="body" type="Text[][]" required>
+  Array of rows. Each row is an array of `{ text, styles? }` cell objects. Every row **must** contain exactly `columns` cells.
+</ParamField>
+
+<ParamField body="column_widths" type="number[]">
+  Array of character widths for each column. When provided:
+  - Length must equal `columns`.
+  - The **sum must equal the paper's chars-per-line** (e.g. 48 for `Mm80`, 32 for `Mm58`).
+  - If omitted, columns are distributed evenly across the paper width.
+</ParamField>
+
+<ParamField body="header" type="Text[]">
+  Optional array of header cells. Must contain exactly `columns` elements if provided.
+</ParamField>
+
+<ParamField body="truncate" type="boolean">
+  When `true`, long cell text is truncated to fit its column. When `false` (default), text wraps. Defaults to `false` in JSON; the `table()` builder defaults to `true`.
+</ParamField>
+
+<CodeGroup>
+```json Minimal (3-column, no widths)
+{
+  "Table": {
+    "columns": 3,
+    "body": [
+      [
+        { "text": "1" },
+        { "text": "Americano" },
+        { "text": "$2.50" }
+      ]
+    ]
+  }
+}
+```
+
+```json With custom widths and header (Mm80, sum = 48)
+{
+  "Table": {
+    "columns": 3,
+    "column_widths": [6, 28, 14],
+    "header": [
+      { "text": "QTY", "styles": { "bold": true } },
+      { "text": "ITEM",  "styles": { "bold": true } },
+      { "text": "TOTAL", "styles": { "bold": true, "align": "right" } }
+    ],
+    "body": [
+      [
+        { "text": "1" },
+        { "text": "Americano" },
+        { "text": "$2.50", "styles": { "align": "right" } }
+      ],
+      [
+        { "text": "2" },
+        { "text": "Croissant" },
+        { "text": "$7.00", "styles": { "align": "right" } }
+      ]
+    ],
+    "truncate": true
+  }
+}
+```
+
+```typescript Builder
+import { table, text, TEXT_ALIGN } from "tauri-plugin-thermal-printer";
+
+table(
+  3,
+  [
+    [text("1"), text("Americano"), text("$2.50", { align: TEXT_ALIGN.RIGHT })],
+    [text("2"), text("Croissant"), text("$7.00", { align: TEXT_ALIGN.RIGHT })],
+  ],
+  {
+    column_widths: [6, 28, 14],
+    header: [
+      text("QTY",   { bold: true }),
+      text("ITEM",  { bold: true }),
+      text("TOTAL", { bold: true, align: TEXT_ALIGN.RIGHT }),
+    ],
+    truncate: true,
+  }
+)
+```
+</CodeGroup>
+
+<Warning>
+  **Row cell count must match `columns` exactly.** If a row has fewer or more cells than the declared `columns` value, the Rust backend will throw an error:
+  `"Table row N has X cells but Y columns declared"`.
+</Warning>
+
+<Warning>
+  **`column_widths` sum must match `chars_per_line`.** When `column_widths` is provided and its sum does not equal the paper's chars-per-line, printing will fail with:
+  `"column_widths sum (N) must equal paper chars_per_line (M)"`.
+  Use the table below to check your paper size's character width.
+</Warning>
+
+### Paper width reference
+
+| Paper size | Chars per line | Notes |
+|------------|---------------|-------|
+| `Mm40` | 21 | Handheld ticket printers |
+| `Mm44` | 24 | Compact POS |
+| `Mm58` | 32 | Common portable format |
+| `Mm72` | 42 | Mid-range |
+| `Mm80` | 48 | Standard large format (default) |
+| `Mm104` | 62 | Wide format |
+
+---
+
+## Line
+
+The `Line` section fills the entire paper width with a repeated single character, creating a horizontal separator. It is one of the most commonly used sections on receipts — separating the header from the item list, and the total from the payment section.
+
+<ParamField body="character" type="string" required>
+  The single character to repeat across the full paper width. Common choices: `"-"`, `"="`, `"_"`, `"*"`, `"~"`.
+</ParamField>
+
+<CodeGroup>
+```json Dashes
+{ "Line": { "character": "-" } }
+```
+
+```json Double-line (equals)
+{ "Line": { "character": "=" } }
+```
+
+```typescript Builder
+import { line } from "tauri-plugin-thermal-printer";
+
+line("-")   // dashes
+line("=")   // equals signs
+line("*")   // asterisks
+```
+</CodeGroup>
+
+---
+
+## GlobalStyles
+
+The `GlobalStyles` section changes the **default styles for all subsequent text sections** (`Title`, `Subtitle`, `Text`, `Table`, `Line`) until another `GlobalStyles` section overrides them again. All fields are optional — you only need to specify what you want to change.
+
+<ParamField body="bold" type="boolean">
+  Enable bold text. Default: `false`.
+</ParamField>
+
+<ParamField body="underline" type="boolean">
+  Enable underlined text. Default: `false`.
+</ParamField>
+
+<ParamField body="align" type='"left" | "center" | "right"'>
+  Text alignment. Default: `"left"`.
+</ParamField>
+
+<ParamField body="italic" type="boolean">
+  Enable italic text. Default: `false`.
+</ParamField>
+
+<ParamField body="invert" type="boolean">
+  Invert colors (white text on black background). Default: `false`.
+</ParamField>
+
+<ParamField body="font" type='"A" | "B" | "C"'>
+  Select printer font. Font A is the widest and most readable; Font B is narrower. Default: `"A"`.
+</ParamField>
+
+<ParamField body="rotate" type="boolean">
+  Rotate text 90 degrees clockwise. Default: `false`.
+</ParamField>
+
+<ParamField body="upside_down" type="boolean">
+  Print text upside-down. Default: `false`.
+</ParamField>
+
+<ParamField body="size" type='"normal" | "height" | "width" | "double"'>
+  Character size. `"height"` doubles height only, `"width"` doubles width only, `"double"` doubles both. Default: `"normal"`.
+</ParamField>
+
+<CodeGroup>
+```json Set center alignment globally
+{
+  "GlobalStyles": {
+    "align": "center"
+  }
+}
+```
+
+```json Full reset to defaults
+{
+  "GlobalStyles": {
+    "bold": false,
+    "underline": false,
+    "align": "left",
+    "italic": false,
+    "invert": false,
+    "font": "A",
+    "rotate": false,
+    "upside_down": false,
+    "size": "normal"
+  }
+}
+```
+
+```typescript Builder
+import { globalStyles, TEXT_ALIGN } from "tauri-plugin-thermal-printer";
+
+// Switch to centered output for a block of text
+globalStyles({ align: TEXT_ALIGN.CENTER })
+
+// Reset to defaults
+globalStyles({
+  bold: false,
+  underline: false,
+  align: TEXT_ALIGN.LEFT,
+  italic: false,
+  invert: false,
+  font: "A",
+  rotate: false,
+  upside_down: false,
+  size: "normal",
+})
+```
+</CodeGroup>
+
+<Note>
+  `GlobalStyles` affects all **subsequent** sections in the `sections` array. It does not retroactively change sections that have already been processed. Insert a second `GlobalStyles` section to revert any changes for later sections.
+</Note>
+
+---
+
+## Complete example
+
+The example below combines all text section types into a short receipt for an 80 mm printer.
+
+```typescript
+import {
+  print_thermal_printer,
+  type PrintJobRequest,
+  title, subtitle, text, line, table, globalStyles, feed, cut,
+  TEXT_ALIGN, TEXT_SIZE, ENCODE,
+} from "tauri-plugin-thermal-printer";
+
+const job: PrintJobRequest = {
+  printer: "TM-T20II",
+  paper_size: "Mm80",
+  options: { code_page: 0, encode: ENCODE.ACCENT_REMOVER },
+  sections: [
+    // ── Header ──────────────────────────────────────────────
+    globalStyles({ align: TEXT_ALIGN.CENTER }),
+    title("DEMO CAFÉ"),
+    subtitle("Receipt #00142"),
+    text("123 Main St — (555) 000-1234"),
+    line("="),
+
+    // ── Item table ───────────────────────────────────────────
+    globalStyles({ align: TEXT_ALIGN.LEFT }),
+    table(
+      3,
+      [
+        [text("1"), text("Espresso"),   text("$3.00", { align: TEXT_ALIGN.RIGHT })],
+        [text("2"), text("Croissant"),  text("$7.50", { align: TEXT_ALIGN.RIGHT })],
+        [text("1"), text("Cold Brew"),  text("$4.25", { align: TEXT_ALIGN.RIGHT })],
+      ],
+      {
+        column_widths: [4, 30, 14], // 4+30+14 = 48 (Mm80)
+        header: [
+          text("QTY",   { bold: true }),
+          text("ITEM",  { bold: true }),
+          text("PRICE", { bold: true, align: TEXT_ALIGN.RIGHT }),
+        ],
+        truncate: true,
+      }
+    ),
+    line("-"),
+
+    // ── Totals ───────────────────────────────────────────────
+    text("Total: $14.75", { bold: true, size: TEXT_SIZE.DOUBLE, align: TEXT_ALIGN.RIGHT }),
+    line("="),
+
+    // ── Footer ───────────────────────────────────────────────
+    globalStyles({ align: TEXT_ALIGN.CENTER }),
+    text("Thank you for visiting!"),
+    text("www.democafe.com"),
+
+    feed(3),
+    cut(),
+  ],
+};
+
+await print_thermal_printer(job);
+```

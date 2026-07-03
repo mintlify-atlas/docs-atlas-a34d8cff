@@ -1,0 +1,122 @@
+---
+title: "Plugin Architecture: How Thermal Printing Works"
+sidebarTitle: "Architecture"
+description: "A deep dive into the full request lifecycle — from TypeScript API calls through Tauri IPC and Rust processing down to ESC/POS bytes on the printer."
+---
+
+The Tauri Plugin Thermal Printer acts as a **translator** between a developer-friendly TypeScript API and the raw ESC/POS binary commands that thermal printers understand. Understanding the architecture helps you reason about platform differences, debug unexpected output, and make the most of the plugin's capabilities.
+
+## Architecture Diagram
+
+The following diagram shows the full data path from your frontend code to the physical printer across both the desktop and Android paths:
+
+```
+Frontend (JavaScript/TypeScript)
+    ↓ (IPC Commands)
+Tauri Core (Rust)  ←— ESC/POS generation (shared across all platforms)
+    ↓ (Platform-specific implementations)
+    ├── Desktop: Operating System (Linux/macOS/Windows)
+    │       ↓ (Raw binary data)
+    │   Thermal Printer (ESC/POS protocol)
+    │
+    └── Android: Kotlin Plugin
+            ↓ (Bluetooth SPP / RFCOMM)
+        Thermal Printer (ESC/POS protocol)
+```
+
+ESC/POS generation lives entirely in Rust and is **shared across every platform** — the same `ProcessPrint` pipeline runs whether you are targeting Windows, Linux, macOS, or Android. Only the final delivery mechanism changes.
+
+## Core Components
+
+The plugin is built from four tightly-coupled layers.
+
+<CardGroup cols={2}>
+  <Card title="Data Models" icon="database">
+    Defined in `src/models/`. Contains `PrintJobRequest` (the main print descriptor), the `PrintSections` enum (all printable content types), and `GlobalStyles` (font, alignment, size, etc.). These types are shared between Rust and TypeScript via Tauri's serialisation layer.
+  </Card>
+  <Card title="Tauri Commands" icon="bolt">
+    Defined in `src/commands.rs`. Exposes three `#[command]` functions to the frontend — `list_thermal_printers`, `print_thermal_printer`, and `test_thermal_printer` — that delegate immediately to the platform implementation.
+  </Card>
+  <Card title="Print Processing" icon="gear">
+    Defined in `src/process/process_print.rs`. The `ProcessPrint` struct iterates over every section in a `PrintJobRequest` and converts each one into ESC/POS byte sequences, applying the current `GlobalStyles` context and running text through the configured `TextEncoder`.
+  </Card>
+  <Card title="OS Integration" icon="microchip">
+    Defined in `src/desktop_printers/` (desktop) and `android/` (Kotlin). Receives the finished `Vec<u8>` from `ProcessPrint` and hands it to the operating system or Bluetooth stack for transmission.
+  </Card>
+</CardGroup>
+
+## Desktop Flow
+
+<Steps>
+  <Step title="Frontend sends PrintJobRequest">
+    Your TypeScript code calls `print_thermal_printer(job)`. The plugin invokes `plugin:thermal-printer|print_thermal_printer` over Tauri's IPC bridge, serialising the `PrintJobRequest` struct as JSON.
+  </Step>
+  <Step title="Tauri receives and routes the command">
+    The Rust `#[command]` handler in `src/commands.rs` deserialises the request and calls `app.thermal_printer().print_thermal_printer(print_job_request)` on the desktop implementation.
+  </Step>
+  <Step title="ProcessPrint generates ESC/POS bytes">
+    `ProcessPrint::generate_document` initialises the printer (`\x1B\x40`), writes the code-page select command (`\x1B\x74\x{n}`), then processes every section in order — converting titles, text, tables, QR codes, barcodes, and images into their corresponding byte sequences.
+  </Step>
+  <Step title="Operating System sends binary data to the printer">
+    On **Linux/macOS** the finished `Vec<u8>` is piped to `lp -d {printer_name} -o raw` via CUPS. On **Windows** it is sent directly using the WinAPI sequence `OpenPrinterW` → `StartDocPrinterW` → `StartPagePrinter` → `WritePrinter` → teardown.
+  </Step>
+  <Step title="Thermal printer interprets ESC/POS commands and prints">
+    The printer's firmware reads the byte stream, executes each ESC/POS command in sequence (set alignment, enable bold, print text, render QR, cut paper…), and produces the physical output.
+  </Step>
+</Steps>
+
+## Android Flow
+
+<Steps>
+  <Step title="Frontend sends PrintJobRequest">
+    Same as desktop — `print_thermal_printer(job)` is called in TypeScript. The `printer` field must be the Bluetooth MAC address of the target device (e.g. `"AA:BB:CC:DD:EE:FF"`).
+  </Step>
+  <Step title="Rust generates ESC/POS binary data">
+    The mobile implementation in `src/mobile.rs` runs the identical `ProcessPrint::generate_document` pipeline, producing the same `Vec<u8>` byte stream as the desktop path.
+  </Step>
+  <Step title="Kotlin plugin receives binary data and MAC address">
+    The Rust layer calls `run_mobile_plugin("print_raw_data", PrintRawRequest { identifier, data })`. The Kotlin `Thermal_Printer_Plugin` receives the identifier string and raw byte array.
+  </Step>
+  <Step title="Bluetooth SPP connection is established">
+    `BluetoothPrinter.printRawData` retrieves the remote device by MAC address, cancels any in-progress discovery, then opens an RFCOMM socket using the standard SPP UUID (`00001101-0000-1000-8000-00805F9B34FB`).
+  </Step>
+  <Step title="Thermal printer interprets ESC/POS and prints">
+    The byte stream is written to the socket's output stream. The printer firmware executes each command identically to the desktop path.
+  </Step>
+</Steps>
+
+## ESC/POS Protocol
+
+ESC/POS (Escape Sequence for Point of Sale) is the de-facto binary command language for thermal printers, originally developed by Epson in the 1980s. Every formatting action — alignment, bold text, QR codes, paper cuts — is encoded as a short sequence of bytes beginning with the `ESC` control character (`\x1B`).
+
+The plugin generates all ESC/POS commands internally so you never write raw bytes yourself. Here are a few examples of what the `ProcessPrint` layer emits:
+
+| Hex sequence | Effect |
+|---|---|
+| `\x1B\x40` | Initialise printer (sent at the start of every job) |
+| `\x1B\x74\x06` | Select code page 6 (Windows-1252) via `ESC t n` |
+| `\x1B\x61\x00` | Left-align text |
+| `\x1B\x61\x01` | Centre-align text |
+| `\x1B\x61\x02` | Right-align text |
+| `\x1B\x45\x01` | Enable bold |
+| `\x1B\x45\x00` | Disable bold |
+| `\x1B\x64\x03` | Feed 3 lines (`ESC d n`) |
+| `\x1D\x56\x41\x00` | Partial paper cut |
+
+<Note>
+  Each printer model may interpret certain ESC/POS commands slightly differently. If a feature (such as a specific cut mode or font) does not produce the expected result, consult your printer's programming manual for the correct command values.
+</Note>
+
+## Platform Implementations
+
+| Platform | Printer Discovery | Print Delivery | Connection Types |
+|---|---|---|---|
+| **Linux** | `lpstat -p` + `lpstat -v` (CUPS) | `lp -d {name} -o raw` | USB, Network, Parallel |
+| **macOS** | `lpstat -p` + `lpstat -v` (CUPS) | `lp -d {name} -o raw` | USB, Network |
+| **Windows** | `EnumPrintersW` (WinAPI) | `OpenPrinterW` + `WritePrinter` | USB, Network, Serial |
+| **Android** | `PrinterDiscovery` (USB + Bluetooth) | `BluetoothPrinter` via RFCOMM SPP | Bluetooth, USB (discovery only) |
+| **iOS** | ❌ Not implemented | ❌ Not implemented | — |
+
+<Tip>
+  On desktop, the `printer` field in `PrintJobRequest` must match the printer name exactly as it appears in the system — use `list_thermal_printers()` to retrieve the correct name for your platform.
+</Tip>
